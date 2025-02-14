@@ -37,7 +37,7 @@ SET_COMMANDS = True
 GDRIVE_ID = "1IMjxuLJicbEoEpWMpi2FDRqfag0mJ-If"
 IS_TEAM_DRIVE = False
 STOP_DUPLICATE = False
-INDEX_URL = "https://iu.hellohoneybunny004.workers.dev/0:""
+INDEX_URL = "https://iu.hellohoneybunny004.workers.dev/0:"
 # Rclone
 RCLONE_PATH = ""
 RCLONE_FLAGS = ""
