@@ -1,46 +1,50 @@
-from PIL import Image
-from aioshutil import rmtree
 from asyncio import sleep
 from logging import getLogger
-from natsort import natsorted
-from os import walk, path as ospath
-from time import time
+from os import path as ospath, walk
 from re import match as re_match, sub as re_sub
-from pyrogram.errors import FloodWait, RPCError, BadRequest
+from time import time
+
+from aioshutil import rmtree
+from natsort import natsorted
+from PIL import Image
+from pyrogram.errors import BadRequest, FloodWait, RPCError
+
 try:
     from pyrogram.errors import FloodPremiumWait
 except ImportError:
     FloodPremiumWait = FloodWait
 from aiofiles.os import (
-    remove,
     path as aiopath,
+    remove,
     rename,
 )
 from pyrogram.types import (
-    InputMediaVideo,
     InputMediaDocument,
     InputMediaPhoto,
+    InputMediaVideo,
 )
 from tenacity import (
-    retry,
-    wait_exponential,
-    stop_after_attempt,
-    retry_if_exception_type,
     RetryError,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
 )
 
 from ...core.config_manager import Config
 from ...core.tg_client import TgClient
 from ..ext_utils.bot_utils import sync_to_async
-from ..ext_utils.files_utils import is_archive, get_base_name
-from ..telegram_helper.message_utils import delete_message
+from ..ext_utils.files_utils import get_base_name, is_archive
+from ..ext_utils.status_utils import get_readable_file_size, get_readable_time
 from ..ext_utils.media_utils import (
-    get_media_info,
-    get_document_type,
-    get_video_thumbnail,
     get_audio_thumbnail,
+    get_document_type,
+    get_media_info,
     get_multiple_frames_thumbnail,
+    get_video_thumbnail,
+    get_md5_hash,
 )
+from ..telegram_helper.message_utils import delete_message
 
 LOGGER = getLogger(__name__)
 
@@ -53,7 +57,7 @@ class TelegramUploader:
         self._path = path
         self._start_time = time()
         self._total_files = 0
-        self._thumb = self._listener.thumb or f"Thumbnails/{listener.user_id}.jpg"
+        self._thumb = self._listener.thumb or f"thumbnails/{listener.user_id}.jpg"
         self._msgs_dict = {}
         self._corrupted = 0
         self._is_corrupted = False
@@ -62,6 +66,8 @@ class TelegramUploader:
         self._up_path = ""
         self._lprefix = ""
         self._lsuffix = ""
+        self._lcaption = ""
+        self._lfont = ""
         self._bot_pm = False
         self._media_group = False
         self._is_private = False
@@ -85,10 +91,16 @@ class TelegramUploader:
             "BOT_PM": ("_bot_pm", False),
             "LEECH_PREFIX": ("_lprefix", ""),
             "LEECH_SUFFIX": ("_lsuffix", ""),
+            "LEECH_CAPTION": ("_lcaption", ""),
+            "LEECH_FONT": ("_lfont", ""),
         }
 
         for key, (attr, default) in settings_map.items():
-            setattr(self, attr, self._listener.user_dict.get(key) or getattr(Config, key, default))
+            setattr(
+                self,
+                attr,
+                self._listener.user_dict.get(key) or getattr(Config, key, default),
+            )
 
         if self._thumb != "none" and not await aiopath.exists(self._thumb):
             self._thumb = None
@@ -96,31 +108,26 @@ class TelegramUploader:
     async def _msg_to_reply(self):
         if self._listener.up_dest:
             msg_link = (
-                self._listener.message.link
-                if self._listener.is_super_chat
-                else ""
+                self._listener.message.link if self._listener.is_super_chat else ""
             )
             msg = f"""➲ <b><u>Leech Started :</u></b>
 ┃
-┠ <b>User :</b> {self._listener.user.mention} ( #ID{self._listener.user_id} ){"\n┠ <b>Message Link :</b> <a href='{msg_link}'>Click Here</a>" if msg_link else ""}
+┠ <b>User :</b> {self._listener.user.mention} ( #ID{self._listener.user_id} ){f"\n┠ <b>Message Link :</b> <a href='{msg_link}'>Click Here</a>" if msg_link else ""}
 ┖ <b>Source :</b> <a href='{self._listener.source_url}'>Click Here</a>"""
             try:
+                self._sent_msg = await self._listener.client.send_message(
+                    chat_id=self._listener.up_dest,
+                    text=msg,
+                    disable_web_page_preview=True,
+                    message_thread_id=self._listener.chat_thread_id,
+                    disable_notification=True,
+                )
                 if self._user_session:
-                    self._sent_msg = await TgClient.user.send_message(
-                        chat_id=self._listener.up_dest,
-                        text=msg,
-                        disable_web_page_preview=True,
-                        message_thread_id=self._listener.chat_thread_id,
-                        disable_notification=True,
+                    self._sent_msg = await TgClient.user.get_messages(
+                        chat_id=self._sent_msg.chat.id,
+                        message_ids=self._sent_msg.id,
                     )
                 else:
-                    self._sent_msg = await self._listener.client.send_message(
-                        chat_id=self._listener.up_dest,
-                        text=msg,
-                        disable_web_page_preview=True,
-                        message_thread_id=self._listener.chat_thread_id,
-                        disable_notification=True,
-                    )
                     self._is_private = self._sent_msg.chat.type.name == "PRIVATE"
             except Exception as e:
                 await self._listener.on_upload_error(str(e))
@@ -140,17 +147,66 @@ class TelegramUploader:
             self._sent_msg = self._listener.message
         return True
 
-    async def _prepare_file(self, file_, dirpath):
+    async def _prepare_file(self, pre_file_, dirpath):
+        cap_file_ = file_ = pre_file_
+
         if self._lprefix:
-            cap_mono = f"{self._lprefix}{file_}"
-            self._lprefix = re_sub("<.*?>", "", self._lprefix)
-            file_ = f"{self._lprefix}{file_}"
-            new_path = ospath.join(dirpath, file_)
-            await rename(self._up_path, new_path)
-            self._up_path = new_path
-        else:
-            cap_mono = f"<code>{file_}</code>"
-        if len(file_) > 60:
+            cap_file_ = self._lprefix.replace(r"\s", " ") + file_
+            self._lprefix = re_sub(r"<.*?>", "", self._lprefix).replace(r"\s", " ")
+            if not file_.startswith(self._lprefix):
+                file_ = f"{self._lprefix}{file_}"
+
+        if self._lsuffix:
+            name, ext = ospath.splitext(file_)
+            cap_file_ = name + self._lsuffix.replace(r"\s", " ") + ext
+            self._lsuffix = re_sub(r"<.*?>", "", self._lsuffix).replace(r"\s", " ")
+
+        cap_mono = (
+            f"<{Config.LEECH_FONT}>{cap_file_}</{Config.LEECH_FONT}>"
+            if Config.LEECH_FONT
+            else cap_file_
+        )
+        if self._lcaption:
+            self._lcaption = re_sub(
+                r"(\\\||\\\{|\\\}|\\s)",
+                lambda m: {r"\|": "%%", r"\{": "&%&", r"\}": "$%$", r"\s": " "}[
+                    m.group(0)
+                ],
+                self._lcaption,
+            )
+
+            parts = self._lcaption.split("|")
+            parts[0] = re_sub(
+                r"\{([^}]+)\}", lambda m: f"{{{m.group(1).lower()}}}", parts[0]
+            )
+            up_path = ospath.join(dirpath, pre_file_)
+            dur, qual, lang, subs = await get_media_info(up_path, True)
+            cap_mono = parts[0].format(
+                filename=cap_file_,
+                size=get_readable_file_size(await aiopath.getsize(up_path)),
+                duration=get_readable_time(dur),
+                quality=qual,
+                languages=lang,
+                subtitles=subs,
+                md5_hash=await sync_to_async(get_md5_hash(up_path)),
+                # prefilename = 
+                # precaption =
+            )
+
+            for part in parts[1:]:
+                args = part.split(":")
+                cap_mono = cap_mono.replace(
+                    args[0],
+                    args[1] if len(args) > 1 else "",
+                    int(args[2]) if len(args) == 3 else -1,
+                )
+            cap_mono = re_sub(
+                r"%%|&%&|\$%\$",
+                lambda m: {"%%": "|", "&%&": "{", "$%$": "}"}[m.group()],
+                cap_mono,
+            )
+
+        if len(file_) > 56:
             if is_archive(file_):
                 name = get_base_name(file_)
                 ext = file_.split(name, 1)[1]
@@ -163,12 +219,19 @@ class TelegramUploader:
             else:
                 name = file_
                 ext = ""
-            extn = len(ext)
-            remain = 60 - extn
-            name = name[:remain]
-            new_path = ospath.join(dirpath, f"{name}{ext}")
+            if self._lsuffix:
+                ext = f"{self._lsuffix}{ext}"
+            name = name[: 56 - len(ext)]
+            file_ = f"{name}{ext}"
+        elif self._lsuffix:
+            name, ext = ospath.splitext(file_)
+            file_ = f"{name}{self._lsuffix}{ext}"
+
+        if pre_file_ != file_:
+            new_path = ospath.join(dirpath, file_)
             await rename(self._up_path, new_path)
             self._up_path = new_path
+
         return cap_mono
 
     def _get_input_media(self, subkey, key):
@@ -232,7 +295,9 @@ class TelegramUploader:
                     chat_id=self._listener.user_id,
                     from_chat_id=self._sent_msg.chat.id,
                     message_id=self._sent_msg.id,
-                    reply_to_message_id=self._listener.pm_msg.id if self._listener.pm_msg else None
+                    reply_to_message_id=self._listener.pm_msg.id
+                    if self._listener.pm_msg
+                    else None,
                 )
         except Exception as err:
             if not self._listener.is_cancelled:
@@ -244,9 +309,9 @@ class TelegramUploader:
         if not res:
             return
         for dirpath, _, files in natsorted(await sync_to_async(walk, self._path)):
-            if dirpath.endswith("/yt-dlp-thumb"):
+            if dirpath.strip().endswith("/yt-dlp-thumb"):
                 continue
-            if dirpath.endswith("_mltbss"):
+            if dirpath.strip().endswith("_mltbss"):
                 await self._send_screenshots(dirpath, files)
                 await rmtree(dirpath, ignore_errors=True)
                 continue
@@ -503,7 +568,7 @@ class TelegramUploader:
             ):
                 await remove(thumb)
             err_type = "RPCError: " if isinstance(err, RPCError) else ""
-            LOGGER.error(f"{err_type}{err}. Path: {self._up_path}")
+            LOGGER.error(f"{err_type}{err}. Path: {self._up_path}", exc_info=True)
             if isinstance(err, BadRequest) and key != "documents":
                 LOGGER.error(f"Retrying As Document. Path: {self._up_path}")
                 return await self._upload_file(cap_mono, file, o_path, True)

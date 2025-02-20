@@ -1,14 +1,17 @@
+# ruff: noqa: E402
+
 from uvloop import install
 
 install()
+
+from subprocess import run as srun
+from os import getcwd
 from asyncio import Lock, new_event_loop, set_event_loop
-from datetime import datetime
 from logging import (
     ERROR,
     INFO,
     WARNING,
     FileHandler,
-    Formatter,
     StreamHandler,
     basicConfig,
     getLogger,
@@ -18,8 +21,6 @@ from time import time
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pyrogram import utils as pyroutils
-from pytz import timezone
-from tzlocal import get_localzone
 
 from sabnzbdapi import SabnzbdClient
 
@@ -49,14 +50,6 @@ basicConfig(
 LOGGER = getLogger(__name__)
 cpu_no = cpu_count()
 
-
-def changetz(*args):
-    return datetime.now(timezone("Asia/Kolkata")).timetuple()
-
-
-Formatter.converter = changetz
-LOGGER.info("Logging synced with Timezone !")
-
 bot_cache = {}
 DOWNLOAD_DIR = "/usr/src/app/downloads/"
 intervals = {"status": {}, "qb": "", "jd": "", "nzb": "", "stopAll": False}
@@ -73,6 +66,7 @@ status_dict = {}
 task_dict = {}
 rss_dict = {}
 shortener_dict = {}
+var_list = ['BOT_TOKEN', 'TELEGRAM_API', 'TELEGRAM_HASH', 'OWNER_ID', 'DATABASE_URL', 'BASE_URL', 'UPSTREAM_REPO', 'UPSTREAM_BRANCH', "UPDATE_PKGS"]
 auth_chats = {}
 excluded_extensions = ["aria2", "!qB"]
 drives_names = []
@@ -95,5 +89,6 @@ sabnzbd_client = SabnzbdClient(
     api_key="admin",
     port="8070",
 )
+srun(["torrentmaster", "-d", f"--profile={getcwd()}"], check=False)
 
-scheduler = AsyncIOScheduler(timezone=str(get_localzone()), event_loop=bot_loop)
+scheduler = AsyncIOScheduler(event_loop=bot_loop)

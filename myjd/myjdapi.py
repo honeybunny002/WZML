@@ -2,6 +2,7 @@ from json import dumps, loads, JSONDecodeError
 from httpx import AsyncClient, RequestError
 from httpx import AsyncHTTPTransport
 from functools import wraps
+from asyncio import sleep
 
 from .exception import (
     MYJDApiException,
@@ -251,45 +252,49 @@ class Linkgrabber:
 
     async def query_links(self, params=None):
         """
+        Get the links in the linkcollector/linkgrabber.
 
-        Get the links in the linkcollector/linkgrabber
+        :param params: A dictionary with options. The default dictionary is configured 
+                   to return all downloads with full details, but you can provide your own options.
+                   Available options:
+                   {
+                       "bytesTotal"    : false,
+                       "comment"       : false,
+                       "status"        : false,
+                       "enabled"       : false,
+                       "maxResults"    : -1,
+                       "startAt"       : 0,
+                       "packageUUIDs"  : null,
+                       "hosts"         : false,
+                       "url"           : false,
+                       "availability"  : false,
+                       "variantIcon"   : false,
+                       "variantName"   : false,
+                       "variantID"     : false,
+                       "variants"      : false,
+                       "priority"      : false
+                   }
+        :type params: dict
+        :rtype: list of dict
 
-        :param params: A dictionary with options. The default dictionary is
-        configured so it returns you all the downloads with all details, but you
-        can put your own with your options. All the options available are this
-        ones:
-        {
-        "bytesTotal"    : false,
-        "comment"       : false,
-        "status"        : false,
-        "enabled"       : false,
-        "maxResults"    : -1,
-        "startAt"       : 0,
-        "packageUUIDs"  : null,
-        "hosts"         : false,
-        "url"           : false,
-        "availability"  : false,
-        "variantIcon"   : false,
-        "variantName"   : false,
-        "variantID"     : false,
-        "variants"      : false,
-        "priority"      : false
-        }
-        :type: Dictionary
-        :rtype: List of dictionaries of this style, with more or less detail based on your options.
-
-        [   {   'availability': 'ONLINE',
-            'bytesTotal': 68548274,
-            'enabled': True,
-            'name': 'The Rick And Morty Theory - The Original        Morty_ - '
-                    'Cartoon Conspiracy (Ep. 74) @ChannelFred (192kbit).m4a',
-            'packageUUID': 1450430888524,
-            'url': 'youtubev2://DEMUX_M4A_192_720P_V4/d1NZf1w2BxQ/',
-            'uuid': 1450430889576,
-            'variant': {   'id': 'DEMUX_M4A_192_720P_V4',
-                        'name': '192kbit/s M4A-Audio'},
-            'variants': True
-            }, ... ]
+        Example response:
+            [
+            {
+                'availability': 'ONLINE',
+                'bytesTotal': 68548274,
+                'enabled': True,
+                'name': 'The Rick And Morty Theory - The Original Morty_ - Cartoon Conspiracy (Ep. 74) @ChannelFred (192kbit).m4a',
+                'packageUUID': 1450430888524,
+                'url': 'youtubev2://DEMUX_M4A_192_720P_V4/d1NZf1w2BxQ/',
+                'uuid': 1450430889576,
+                'variant': {
+                'id': 'DEMUX_M4A_192_720P_V4',
+                'name': '192kbit/s M4A-Audio'
+                },
+                'variants': True
+            },
+            ...
+            ]
         """
         if params is None:
             params = [
@@ -727,7 +732,6 @@ class MyJdApi:
         transport = AsyncHTTPTransport(retries=10, verify=False)
 
         self._http_session = clientSession(transport=transport)
-
         self._http_session.verify = False
 
         return self._http_session
@@ -736,52 +740,53 @@ class MyJdApi:
         if self._http_session is not None:
             await self._http_session.aclose()
             self._http_session = None
-
+        
     async def request_api(self, path, params=None):
         session = self._session()
-
-        # Prepare params_request based on the input params
-        params_request = params if params is not None else []
-
-        # Construct the request payload
-        params_request = {
-            "params": params_request,
-        }
-        data = dumps(params_request)
-        # Removing quotes around null elements.
-        data = data.replace('"null"', "null")
-        data = data.replace("'null'", "null")
-        request_url = self.__api_url + path
-        try:
-            res = await session.request(
-                "POST",
-                request_url,
-                headers={"Content-Type": "application/json; charset=utf-8"},
-                content=data,
-            )
-            response = res.text
-        except RequestError:
-            return None
-        if res.status_code != 200:
+        
+        data = dumps({"params": params if params is not None else []})
+        data = data.replace('"null"', "null").replace("'null'", "null")
+        url = f"{self.__api_url}{path}"
+        
+        for attempt in range(3):
             try:
-                error_msg = loads(response)
+                res = await session.request(
+                    "POST", url,
+                    headers={"Content-Type": "application/json; charset=utf-8"},
+                    content=data,
+                )
+                txt = res.text
+            except RequestError:
+                if attempt == 2:
+                    return None
+                await sleep(1.2)
+                continue
+            
+            if res.status_code == 200:
+                try:
+                    return loads(txt)
+                except JSONDecodeError as exc:
+                    if attempt == 2:
+                        raise MYJDDecodeException(f"Failed to decode response: {txt}") from exc
+                    await sleep(1.2)
+                    continue
+                
+            try:
+                err = loads(txt)
             except JSONDecodeError as exc:
-                raise MYJDDecodeException(
-                    "Failed to decode response: {}", response
-                ) from exc
-            msg = (
-                "\n\tSOURCE: "
-                + error_msg["src"]
-                + "\n\tTYPE: "
-                + error_msg["type"]
-                + "\n------\nREQUEST_URL: "
-                + self.__api_url
-                + path
-            )
-            msg += "\n"
-            if data is not None:
-                msg += "DATA:\n" + data
-            raise (
-                MYJDApiException.get_exception(error_msg["src"], error_msg["type"], msg)
-            )
-        return loads(response)
+                if attempt == 2:
+                    raise MYJDDecodeException(f"Failed to decode response: {txt}") from exc
+                await sleep(1.2)
+                continue
+            
+            msg = (f"\n\tSOURCE: {err.get('src', 'Unknown')}"
+                   f"\n\tTYPE: {err.get('type', 'Unknown')}"
+                   f"\n------\nREQUEST_URL: {url}\n")
+            if data:
+                msg += f"DATA:\n{data}"
+            if attempt == 2:
+                raise MYJDApiException.get_exception(err.get("src", "Unknown"), err.get("type", "Unknown"), msg)
+            
+            await sleep(1.2)
+        return None
+    

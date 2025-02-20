@@ -36,8 +36,7 @@ async def start(_, message):
 
     if len(message.command) > 1 and message.command[1] == "wzmlx":
         await delete_message(message)
-
-    elif len(message.command) > 1:
+    elif len(message.command) > 1 and message.command[1] != "start":
         decrypted_url = decode_slink(message.command[1])
         if Config.MEDIA_STORE and decrypted_url.startswith("file"):
             decrypted_url = decrypted_url.replace("file", "")
@@ -150,9 +149,7 @@ async def log_cb(_, query):
         await query.answer("Not Yours!", show_alert=True)
     elif data[2] == "close":
         await query.answer()
-        await delete_message(message)
-        if message.reply_to_message:
-            await delete_message(message.reply_to_message)
+        await delete_message(message, message.reply_to_message)
     elif data[2] == "disp":
         await query.answer("Fetching Log..")
         async with aiopen("log.txt", "r") as f:

@@ -1,5 +1,6 @@
 from aiofiles.os import path as aiopath, remove, makedirs, listdir
 from asyncio import sleep, gather
+from contextlib import suppress
 from os import walk, path as ospath
 from secrets import token_hex
 from aioshutil import move, rmtree
@@ -187,6 +188,11 @@ class TaskConfig:
             if "EXCLUDED_EXTENSIONS" not in self.user_dict
             else ["aria2", "!qB"]
         )
+        if not self.rc_flags:
+            if self.user_dict.get("RCLONE_FLAGS"):
+                self.rc_flags = self.user_dict["RCLONE_FLAGS"]
+            elif "RCLONE_FLAGS" not in self.user_dict and Config.RCLONE_FLAGS:
+                self.rc_flags = Config.RCLONE_FLAGS
         if self.link not in ["rcl", "gdl"]:
             if not self.is_jd:
                 if is_rclone_path(self.link):
@@ -340,6 +346,7 @@ class TaskConfig:
                         self.up_dest = self.up_dest.replace("u:", "", 1)
                         self.user_transmission = TgClient.IS_PREMIUM_USER
                     elif self.up_dest.startswith("h:"):
+                        self.up_dest = self.up_dest.replace("h:", "", 1)
                         self.user_transmission = TgClient.IS_PREMIUM_USER
                         self.hybrid_leech = self.user_transmission
                     if "|" in self.up_dest:
@@ -470,10 +477,8 @@ class TaskConfig:
             self.user = self.message.from_user = await self.client.get_users(id_)
             self.user_id = self.user.id
             self.user_dict = user_data.get(self.user_id, {})
-            try:
+            with suppress(Exception):
                 await self.message.unpin()
-            except Exception:
-                pass
         if self.user:
             if username := self.user.username:
                 self.tag = f"@{username}"
@@ -597,7 +602,7 @@ class TaskConfig:
                     if (
                         is_first_archive_split(file_)
                         or is_archive(file_)
-                        and not file_.lower().endswith(".rar")
+                        and not file_.strip().lower().endswith(".rar")
                     ):
                         f_path = ospath.join(dirpath, file_)
                         self.files_to_proceed.append(f_path)
@@ -618,7 +623,7 @@ class TaskConfig:
                 if (
                     is_first_archive_split(file_)
                     or is_archive(file_)
-                    and not file_.lower().endswith(".rar")
+                    and not file_.strip().lower().endswith(".rar")
                 ):
 
                     self.proceed_count += 1
@@ -650,7 +655,7 @@ class TaskConfig:
             for ffmpeg_cmd in cmds:
                 self.proceed_count = 0
                 cmd = [
-                    "ffmpeg",
+                    "videomancer",
                     "-hide_banner",
                     "-loglevel",
                     "error",
@@ -664,9 +669,9 @@ class TaskConfig:
                     delete_files = False
                 index = cmd.index("-i")
                 input_file = cmd[index + 1]
-                if input_file.endswith(".video"):
+                if input_file.strip().endswith(".video"):
                     ext = "video"
-                elif input_file.endswith(".audio"):
+                elif input_file.strip().endswith(".audio"):
                     ext = "audio"
                 elif "." not in input_file:
                     ext = "all"
@@ -684,7 +689,7 @@ class TaskConfig:
                         "all",
                         "audio",
                         "video",
-                    ] and not dl_path.lower().endswith(ext):
+                    ] and not dl_path.strip().lower().endswith(ext):
                         break
                     new_folder = ospath.splitext(dl_path)[0]
                     name = ospath.basename(dl_path)
@@ -744,7 +749,7 @@ class TaskConfig:
                                 "all",
                                 "audio",
                                 "video",
-                            ] and not f_path.lower().endswith(ext):
+                            ] and not f_path.strip().lower().endswith(ext):
                                 continue
                             self.proceed_count += 1
                             var_cmd[index + 1] = f_path
@@ -777,6 +782,7 @@ class TaskConfig:
     async def substitute(self, dl_path):
         def perform_swap(name, swaps):
             name, ext = ospath.splitext(name)
+            name = sub(r"www\S+", "", name)
             for swap in swaps:
                 pattern, res, cnt, sen = (swap + ["", "0", "NOFLAG"][min(len(swap)-1, 2):])[0:4]
                 cnt = 0 if len(cnt) == 0 else int(cnt)
@@ -886,12 +892,12 @@ class TaskConfig:
             if (
                 is_video
                 and vext
-                and not f_path.lower().endswith(f".{vext}")
+                and not f_path.strip().lower().endswith(f".{vext}")
                 and (
                     vstatus == "+"
-                    and f_path.lower().endswith(tuple(fvext))
+                    and f_path.strip().lower().endswith(tuple(fvext))
                     or vstatus == "-"
-                    and not f_path.lower().endswith(tuple(fvext))
+                    and not f_path.strip().lower().endswith(tuple(fvext))
                     or not vstatus
                 )
             ):
@@ -900,12 +906,12 @@ class TaskConfig:
                 is_audio
                 and aext
                 and not is_video
-                and not f_path.lower().endswith(f".{aext}")
+                and not f_path.strip().lower().endswith(f".{aext}")
                 and (
                     astatus == "+"
-                    and f_path.lower().endswith(tuple(faext))
+                    and f_path.strip().lower().endswith(tuple(faext))
                     or astatus == "-"
-                    and not f_path.lower().endswith(tuple(faext))
+                    and not f_path.strip().lower().endswith(tuple(faext))
                     or not astatus
                 )
             ):

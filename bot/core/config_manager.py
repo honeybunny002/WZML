@@ -8,6 +8,7 @@ class Config:
     BASE_URL = ""
     BASE_URL_PORT = 80
     BOT_TOKEN = ""
+    HELPER_TOKENS = ""
     BOT_MAX_TASKS = 0
     BOT_PM = False
     CMD_SUFFIX = ""
@@ -21,6 +22,7 @@ class Config:
     MEDIA_STORE = True
     FORCE_SUB_IDS = ""
     GDRIVE_ID = ""
+    GD_DESP = "Uploaded with WZ Bot"
     INCOMPLETE_TASK_NOTIFIER = False
     INDEX_URL = ""
     IS_TEAM_DRIVE = False
@@ -30,9 +32,11 @@ class Config:
     LEECH_PREFIX = ""
     LEECH_CAPTION = ""
     LEECH_SUFFIX = ""
+    LEECH_FONT = ""
     LEECH_SPLIT_SIZE = 2097152000
     MEDIA_GROUP = False
     HYBRID_LEECH = True
+    HYPER_THREADS = 0
     NAME_SWAP = ""
     OWNER_ID = 0
     QUEUE_ALL = 0
@@ -62,6 +66,7 @@ class Config:
     THUMBNAIL_LAYOUT = ""
     VERIFY_TIMEOUT = 0
     TORRENT_TIMEOUT = 0
+    TIMEZONE = "Asia/Kolkata"
     USER_MAX_TASKS = 0
     USER_TIME_INTERVAL = 0
     UPLOAD_PATHS = {}

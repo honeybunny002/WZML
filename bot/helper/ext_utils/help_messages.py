@@ -1,5 +1,4 @@
 from ..telegram_helper.bot_commands import BotCommands
-#from ...core.tg_client import TgClient
 
 mirror = """<b>Send link along with command line or </b>
 
@@ -389,22 +388,29 @@ NOTE: Try each command without any argument to see more detalis.
 """
 
 BOT_COMMANDS = {
-    "MirrorCommand": "- Start mirroring",
-    "LeechCommand": "- Start leeching",
-    "YtdlCommand": "- Mirror yt-dlp supported link",
-    "YtdlLeechCommand": "- Leech through yt-dlp supported link",
-    "CloneCommand": "- Copy file/folder to Drive",
-    "ForceStartCommand": "- Start task from queue",
-    "CountCommand": "- Count file/folder on Google Drive",
-    "ListCommand": "- Search in Drive",
-    "SearchCommand": "- Search in Torrent",
-    "UserSetCommand": "- User settings",
-    "StatusCommand": "- Get mirror status message",
-    "StatsCommand": "- Check Bot & System stats",
-    "CancelAllCommand": "- Cancel all tasks added by you to the bot",
-    "HelpCommand": "- Get detailed help",
-    "BotSetCommand": "- [ADMIN] Open Bot settings",
-    "LogCommand": "- [ADMIN] View log",
-    "RestartCommand": "- [ADMIN] Restart the bot",
-    # "RestartSessionsCommand": "- [ADMIN] Restart the session instead of the bot",
+    "Mirror": "[link/file] Mirror to Upload Destination",
+    "QbMirror": "[magnet/torrent] Mirror to Upload Destination using qbit",
+    "Ytdl": "[link] Mirror YouTube, m3u8, Social Media and yt-dlp supported urls",
+    "Leech": "[link/file] Leech files to Upload to Telegram",
+    "QbLeech": "[magnet/torrent] Leech files to Upload to Telegram using qbit",
+    "YtdlLeech": "[link] Leech YouTube, m3u8, Social Media and yt-dlp supported urls",
+    "Clone": "[link] Clone files/folders to GDrive",
+    "UserSet": "User personal settings",
+    "ForceStart": "[gid/reply] Force start from queued task",
+    "Count": "[link] Count no. of files/folders in GDrive",
+    "List": "[query] Search any Text which is available in GDrive",
+    "Search": "[query] Search torrents via Qbit Plugins",
+    "MediaInfo": "[reply/link] Get MediaInfo of the Target Media",
+    "SpeedTest": "Check Bot Speed using Speedtest.com",
+    "Select": "[gid/reply] Select files for NZB, Aria2, Qbit Tasks",
+    "Ping": "Ping Bot to test Response Speed",
+    "Status": "[id/me] Tasks Status of Bot",
+    "Stats": "Bot, OS, Repo & System full Statistics",
+    "Rss": "User RSS Management Settings",
+    "CancelAll": "Cancel all Tasks on the Bot",
+    "Help": "Detailed help usage of the WZ Bot",
+    "BotSet": "[SUDO] Bot Management Settings",
+    "Log": "[SUDO] Get Bot Logs for Internal Working",
+    "Restart": "[SUDO] Reboot bot",
+    "RestartSessions": "[SUDO] Reboot User Sessions",
 }

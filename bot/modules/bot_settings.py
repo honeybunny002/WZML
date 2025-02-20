@@ -242,6 +242,7 @@ async def get_buttons(key=None, edit_type=None, edit_mode=False):
         msg = f"Usenet Servers | Page: {int(start / 10)} | State: {state}"
     elif key.startswith("nzbser"):
         index = int(key.replace("nzbser", ""))
+        LOGGER.info(f"Data: {key}, {index}")
         for k in list(Config.USENET_SERVERS[index].keys())[start : 10 + start]:
             buttons.data_button(k, f"botset nzbsevar{index} {k}")
         if state == "view":
@@ -475,10 +476,9 @@ async def update_private_file(_, message, pre_message, key, new_file=False):
             async with aiopen(file_name, "w") as f:
                 await f.write(content.strip())
         else:
-            fn = file_name.rsplit(".zip", 1)[0]
-            if await aiopath.isfile(fn) and file_name != "config.py":
-                await remove(fn)
-            if fn == "accounts":
+            if await aiopath.isfile(file_name) and file_name != "config.py":
+                await remove(file_name)
+            if file_name == "accounts.zip":
                 if await aiopath.exists("accounts"):
                     await rmtree("accounts", ignore_errors=True)
                 if await aiopath.exists("rclone_sa"):
@@ -554,8 +554,6 @@ async def update_private_file(_, message, pre_message, key, new_file=False):
                     shortener_dict[temp[0]] = temp[1]
     await update_buttons(pre_message, key)
     await database.update_private_file(file_name)
-    if await aiopath.exists("accounts.zip"):
-        await remove("accounts.zip")
 
 
 async def event_handler(client, query, pfunc, rfunc, document=False):
@@ -828,6 +826,7 @@ async def edit_bot_settings(client, query):
         await query.answer()
         await update_buttons(message, data[2], data[1])
         pfunc = partial(edit_nzb_server, pre_message=message, key=data[2], index=index)
+        LOGGER.info(f"Query Data: {data[1]}")
         rfunc = partial(update_buttons, message, data[1])
         await event_handler(client, query, pfunc, rfunc)
     elif data[1].startswith("nzbsevar") and state == "view":

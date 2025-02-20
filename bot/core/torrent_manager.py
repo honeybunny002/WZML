@@ -1,7 +1,9 @@
+from asyncio import gather
+from contextlib import suppress
+from pathlib import Path
+
 from aioaria2 import Aria2WebsocketClient
 from aioqbt.client import create_client
-from asyncio import gather
-from pathlib import Path
 
 from .. import LOGGER, aria2_options
 
@@ -22,6 +24,14 @@ class TorrentManager:
         await gather(cls.aria2.close(), cls.qbittorrent.close())
 
     @classmethod
+    async def aria2_remove(cls, download):
+        if download.get("status", "") in ["active", "paused", "waiting"]:
+            await cls.aria2.forceRemove(download.get("gid", ""))
+        else:
+            with suppress(Exception):
+                await cls.aria2.removeDownloadResult(download.get("gid", ""))
+
+    @classmethod
     async def remove_all(cls):
         await cls.pause_all()
         await gather(
@@ -36,10 +46,8 @@ class TorrentManager:
         tasks.extend(
             cls.aria2.forceRemove(download.get("gid")) for download in downloads
         )
-        try:
+        with suppress(Exception):
             await gather(*tasks)
-        except Exception:
-            pass
 
     @classmethod
     async def overall_speed(cls):

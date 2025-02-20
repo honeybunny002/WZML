@@ -1,22 +1,24 @@
-from aioshutil import rmtree as aiormtree
 from asyncio import create_subprocess_exec, sleep, wait_for
 from asyncio.subprocess import PIPE
-from magic import Magic
-from os import walk, path as ospath, readlink
-from re import split as re_split, I, search as re_search, escape
+from contextlib import suppress
+from os import path as ospath, readlink, walk
+from re import I, escape, search as re_search, split as re_split
+
 from aiofiles.os import (
-    remove,
-    path as aiopath,
     listdir,
+    remove,
     rmdir,
-    readlink as aioreadlink,
     symlink,
     makedirs as aiomakedirs,
+    path as aiopath,
+    readlink as aioreadlink,
 )
+from aioshutil import rmtree as aiormtree
+from magic import Magic
 
-from ... import LOGGER, DOWNLOAD_DIR
+from ... import DOWNLOAD_DIR, LOGGER
 from ...core.torrent_manager import TorrentManager
-from .bot_utils import sync_to_async, cmd_exec
+from .bot_utils import cmd_exec, sync_to_async
 from .exceptions import NotSupportedExtractionArchive
 
 ARCH_EXT = [
@@ -99,7 +101,7 @@ def is_first_archive_split(file):
 
 
 def is_archive(file):
-    return file.lower().endswith(tuple(ARCH_EXT))
+    return file.strip().lower().endswith(tuple(ARCH_EXT))
 
 
 def is_archive_split(file):
@@ -129,11 +131,9 @@ async def clean_download(opath):
 
 async def clean_all():
     await TorrentManager.remove_all()
-    try:
+    with suppress(Exception):
         LOGGER.info("Cleaning Download Directory")
         await aiormtree(DOWNLOAD_DIR, ignore_errors=True)
-    except Exception:
-        pass
     await aiomakedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
@@ -142,9 +142,9 @@ async def clean_unwanted(opath):
     for dirpath, _, files in await sync_to_async(walk, opath, topdown=False):
         for filee in files:
             f_path = ospath.join(dirpath, filee)
-            if filee.endswith(".parts") and filee.startswith("."):
+            if filee.strip().endswith(".parts") and filee.startswith("."):
                 await remove(f_path)
-        if dirpath.endswith(".unwanted"):
+        if dirpath.strip().endswith(".unwanted"):
             await aiormtree(dirpath, ignore_errors=True)
     for dirpath, _, files in await sync_to_async(walk, opath, topdown=False):
         if not await listdir(dirpath):
@@ -176,7 +176,9 @@ async def count_files_and_folders(opath):
 
 
 def get_base_name(orig_path):
-    extension = next((ext for ext in ARCH_EXT if orig_path.lower().endswith(ext)), "")
+    extension = next(
+        (ext for ext in ARCH_EXT if orig_path.strip().lower().endswith(ext)), ""
+    )
     if extension != "":
         return re_split(f"{extension}$", orig_path, maxsplit=1, flags=I)[0]
     else:
@@ -211,7 +213,7 @@ def get_mime_type(file_path):
 async def remove_excluded_files(fpath, ee):
     for root, _, files in await sync_to_async(walk, fpath):
         for f in files:
-            if f.lower().endswith(tuple(ee)):
+            if f.strip().lower().endswith(tuple(ee)):
                 await remove(ospath.join(root, f))
 
 

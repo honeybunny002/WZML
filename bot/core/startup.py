@@ -1,23 +1,28 @@
-from aiofiles.os import path as aiopath, remove, makedirs
-from aiofiles import open as aiopen
-from aioshutil import rmtree
-from os import getenv, path as ospath
 from asyncio import create_subprocess_exec, create_subprocess_shell
+from importlib import import_module
+from os import environ, getenv, path as ospath
+
+from aiofiles import open as aiopen
+from aiofiles.os import makedirs, remove, path as aiopath
+from aioshutil import rmtree
+
+from sabnzbdapi.exception import APIResponseError
 
 from .. import (
+    LOGGER,
     aria2_options,
-    qbit_options,
-    nzb_options,
+    auth_chats,
     drives_ids,
     drives_names,
     index_urls,
     shortener_dict,
+    var_list,
     user_data,
     excluded_extensions,
-    LOGGER,
+    nzb_options,
+    qbit_options,
     rss_dict,
     sabnzbd_client,
-    auth_chats,
     sudo_users,
 )
 from ..helper.ext_utils.db_handler import database
@@ -51,19 +56,37 @@ async def update_aria2_options():
 
 
 async def update_nzb_options():
-    no = (await sabnzbd_client.get_config())["config"]["misc"]
-    nzb_options.update(no)
-
+    try:
+        no = (await sabnzbd_client.get_config())["config"]["misc"]
+        nzb_options.update(no)
+    except APIResponseError as e:
+        LOGGER.error(f"Error in NZB Options: {e}")
 
 async def load_settings():
-    if await aiopath.exists("Thumbnails"):
-        await rmtree("Thumbnails", ignore_errors=True)
     if not Config.DATABASE_URL:
         return
+    for p in ["thumbnails", "tokens", "rclone"]:
+        if await aiopath.exists(p):
+            await rmtree(p, ignore_errors=True)
     await database.connect()
     if database.db is not None:
         BOT_ID = Config.BOT_TOKEN.split(":", 1)[0]
-        config_file = Config.get_all()
+        try:
+            settings = import_module("config")
+            config_file = {
+                key: value.strip() if isinstance(value, str) else value
+                for key, value in vars(settings).items()
+                if not key.startswith("__")
+            }
+        except ModuleNotFoundError:
+            config_file = {}
+        config_file.update(
+            {
+                key: value.strip() if isinstance(value, str) else value
+                for key, value in environ.items()
+                if key in var_list
+            }
+        )
 
         old_config = await database.db.settings.deployConfig.find_one(
             {"_id": BOT_ID}, {"_id": 0}
@@ -73,10 +96,16 @@ async def load_settings():
                 {"_id": BOT_ID}, config_file, upsert=True
             )
         if old_config and old_config != config_file:
-            LOGGER.info("Saving.. Config imported from Bot")
+            LOGGER.info("Saving.. Deploy Config imported from Bot")
             await database.db.settings.deployConfig.replace_one(
                 {"_id": BOT_ID}, config_file, upsert=True
             )
+            config_dict = await database.db.settings.config.find_one(
+                {"_id": BOT_ID}, {"_id": 0}
+            ) or {}
+            config_dict.update(config_file)
+            if config_dict:
+                Config.load_dict(config_dict)
         else:
             LOGGER.info("Updating.. Saved Config imported from MongoDB")
             config_dict = await database.db.settings.config.find_one(
@@ -84,10 +113,6 @@ async def load_settings():
             )
             if config_dict:
                 Config.load_dict(config_dict)
-
-        await database.db.settings.config.replace_one(
-            {"_id": BOT_ID}, config_file, upsert=True
-        )
 
         if pf_dict := await database.db.settings.files.find_one(
             {"_id": BOT_ID}, {"_id": 0}
@@ -117,6 +142,7 @@ async def load_settings():
             file_ = key.replace("__", ".")
             async with aiopen(f"sabnzbd/{file_}", "wb+") as f:
                 await f.write(value)
+            LOGGER.info("Loaded.. Sabnzbd Data from MongoDB")
 
         if await database.db.users[BOT_ID].find_one():
             rows = database.db.users[BOT_ID].find({})
@@ -124,7 +150,7 @@ async def load_settings():
                 uid = row["_id"]
                 del row["_id"]
                 paths = {
-                    "THUMBNAIL": f"Thumbnails/{uid}.jpg",
+                    "THUMBNAIL": f"thumbnails/{uid}.jpg",
                     "RCLONE_CONFIG": f"rclone/{uid}.conf",
                     "TOKEN_PICKLE": f"tokens/{uid}.pickle",
                 }
@@ -155,6 +181,10 @@ async def load_settings():
 async def save_settings():
     if database.db is None:
         return
+    config_file = Config.get_all()
+    await database.db.settings.config.update_one(
+        {"_id": TgClient.ID}, {"$set": config_file}, upsert=True
+    )
     if await database.db.settings.aria2c.find_one({"_id": TgClient.ID}) is None:
         await database.db.settings.aria2c.update_one(
             {"_id": TgClient.ID}, {"$set": aria2_options}, upsert=True
@@ -246,6 +276,9 @@ async def load_configurations():
         await create_subprocess_shell(
             f"gunicorn -k uvicorn.workers.UvicornWorker -w 1 web.wserver:app --bind 0.0.0.0:{PORT}"
         )
+        await create_subprocess_shell(
+            "python3 cron_boot.py" 
+        )
 
     if await aiopath.exists("cfg.zip"):
         if await aiopath.exists("/JDownloader/cfg"):
@@ -253,7 +286,6 @@ async def load_configurations():
         await (
             await create_subprocess_exec("7z", "x", "cfg.zip", "-o/JDownloader")
         ).wait()
-        await remove("cfg.zip")
 
     if await aiopath.exists("accounts.zip"):
         if await aiopath.exists("accounts"):

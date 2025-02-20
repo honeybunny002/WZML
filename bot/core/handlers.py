@@ -1,15 +1,14 @@
 # ruff: noqa: F403, F405
 
 from pyrogram.filters import command, regex
-from pyrogram.handlers import MessageHandler, CallbackQueryHandler, EditedMessageHandler
+from pyrogram.handlers import CallbackQueryHandler, EditedMessageHandler, MessageHandler
 from pyrogram.types import BotCommand
 
-
-from ..modules import *
 from ..core.config_manager import Config
 from ..helper.ext_utils.help_messages import BOT_COMMANDS
 from ..helper.telegram_helper.bot_commands import BotCommands
 from ..helper.telegram_helper.filters import CustomFilters
+from ..modules import *
 from .tg_client import TgClient
 
 
@@ -57,7 +56,7 @@ def add_handlers():
     TgClient.bot.add_handler(
         MessageHandler(
             cancel,
-            filters=regex(rf"^/{BotCommands.CancelTaskCommand[1]}(_\w+)?(?!all)")
+            filters=regex(rf"^/{BotCommands.CancelTaskCommand[1]}?(?:_\w+).*$")
             & CustomFilters.authorized,
         )
     )
@@ -276,6 +275,13 @@ def add_handlers():
     )
     TgClient.bot.add_handler(
         MessageHandler(
+            speedtest,
+            filters=command(BotCommands.SpeedTestCommand, case_sensitive=True)
+            & CustomFilters.authorized,
+        )
+    )
+    TgClient.bot.add_handler(
+        MessageHandler(
             bot_stats,
             filters=command(BotCommands.StatsCommand, case_sensitive=True)
             & CustomFilters.authorized,
@@ -336,14 +342,26 @@ def add_handlers():
         )
     )
     if Config.SET_COMMANDS:
+        global BOT_COMMANDS
+        def insert_at(d, k, v, i):
+            return dict(list(d.items())[:i] + [(k, v)] + list(d.items())[i:])
+
+        if Config.JD_EMAIL and Config.JD_PASS:
+            BOT_COMMANDS = insert_at(BOT_COMMANDS, "JdMirror", "[link/file] Mirror to Upload Destination using JDownloader", 2)
+            BOT_COMMANDS = insert_at(BOT_COMMANDS, "JdLeech", "[link/file] Leech files to Upload to Telegram using JDownloader", 6)
+
+        if len(Config.USENET_SERVERS) != 0:
+            BOT_COMMANDS = insert_at(BOT_COMMANDS, "NzbMirror", "[nzb] Mirror to Upload Destination using Sabnzbd", 2)
+            BOT_COMMANDS = insert_at(BOT_COMMANDS, "NzbLeech", "[nzb] Leech files to Upload to Telegram using Sabnzbd", 6)
+
         TgClient.bot.set_bot_commands(
             [
                 BotCommand(
-                    getattr(BotCommands, cmd)[0]
-                    if isinstance(getattr(BotCommands, cmd), list)
-                    else getattr(BotCommands, cmd),
+                    cmds[0] if isinstance(cmds, list) else cmds,
                     description,
                 )
                 for cmd, description in BOT_COMMANDS.items()
-            ],
+                for cmds in [getattr(BotCommands, f"{cmd}Command", None)]
+                if cmds is not None
+            ]
         )

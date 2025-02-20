@@ -17,7 +17,7 @@ from ..helper.telegram_helper.message_utils import send_message, edit_message
 async def gen_mediainfo(message, link=None, media=None, mmsg=None):
     temp_send = await send_message(message, "<i>Generating MediaInfo...</i>")
     try:
-        path = "Mediainfo/"
+        path = "mediainfo/"
         if not await aiopath.isdir(path):
             await mkdir(path)
         file_size = 0
@@ -70,7 +70,7 @@ section_dict = {
 
 def parseinfo(out, size):
     tc, trigger = "", False
-    size_line = f"File size                               : {size / (1024 * 1024):.2f} MiB"
+    size_line = f"File size                                 : {size / (1024 * 1024):.2f} MiB"
     for line in out.split("\n"):
         for section, emoji in section_dict.items():
             if line.startswith(section):

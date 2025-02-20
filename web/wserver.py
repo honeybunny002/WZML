@@ -2,18 +2,20 @@
 from uvloop import install
 
 install()
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from logging import getLogger, FileHandler, StreamHandler, INFO, basicConfig, WARNING
-from asyncio import sleep
-from sabnzbdapi import SabnzbdClient
-from aioaria2 import Aria2HttpClient
-from aioqbt.client import create_client
-from aiohttp.client_exceptions import ClientResponseError
 
+from asyncio import sleep
+from contextlib import asynccontextmanager
+from logging import INFO, WARNING, FileHandler, StreamHandler, basicConfig, getLogger
+
+from aioaria2 import Aria2HttpClient
+from aiohttp.client_exceptions import ClientError
+from aioqbt.client import create_client
+from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
+from sabnzbdapi import SabnzbdClient
 from web.nodes import extract_file_ids, make_tree
+from aiohttp import ClientSession
 
 getLogger("httpx").setLevel(WARNING)
 getLogger("aiohttp").setLevel(WARNING)
@@ -22,9 +24,13 @@ aria2 = None
 qbittorrent = None
 sabnzbd_client = SabnzbdClient(
     host="http://localhost",
-    api_key="mltb",
+    api_key="admin",
     port="8070",
 )
+SERVICES = {
+    "sabnzbd": "http://localhost:8070/sabnzbd",
+    "qbittorrent": "http://localhost:8090",
+}
 
 
 @asynccontextmanager
@@ -73,14 +79,14 @@ async def re_verify(paused, resumed, hash_id):
                 await qbittorrent.torrents.file_prio(
                     hash=hash_id, id=paused, priority=0
                 )
-            except ClientResponseError as e:
+            except (ClientError, TimeoutError) as e:
                 LOGGER.error(f"{e} Errored in reverification paused!")
         if resumed:
             try:
                 await qbittorrent.torrents.file_prio(
                     hash=hash_id, id=resumed, priority=1
                 )
-            except ClientResponseError as e:
+            except (ClientError, TimeoutError) as e:
                 LOGGER.error(f"{e} Errored in reverification resumed!")
         k += 1
         if k > 5:
@@ -186,7 +192,7 @@ async def handle_torrent(request: Request):
                 op = await aria2.getOption(gid)
                 fpath = f"{op['dir']}/"
                 content = make_tree(res, "aria2", fpath)
-        except (Exception, ClientResponseError) as e:
+        except (ClientError, TimeoutError) as e:
             LOGGER.error(str(e))
             content = {
                 "files": [],
@@ -205,7 +211,7 @@ async def handle_rename(gid, data):
             await qbittorrent.torrents.rename_file(hash=gid, **data)
         else:
             await qbittorrent.torrents.rename_folder(hash=gid, **data)
-    except ClientResponseError as e:
+    except (ClientError, TimeoutError) as e:
         LOGGER.error(f"{e} Errored in renaming")
 
 
@@ -220,14 +226,14 @@ async def set_qbittorrent(gid, selected_files, unselected_files):
             await qbittorrent.torrents.file_prio(
                 hash=gid, id=unselected_files, priority=0
             )
-        except ClientResponseError as e:
+        except (ClientError, TimeoutError) as e:
             LOGGER.error(f"{e} Errored in paused")
     if selected_files:
         try:
             await qbittorrent.torrents.file_prio(
                 hash=gid, id=selected_files, priority=1
             )
-        except ClientResponseError as e:
+        except (ClientError, TimeoutError) as e:
             LOGGER.error(f"{e} Errored in resumed")
     await sleep(0.5)
     if not await re_verify(unselected_files, selected_files, gid):
@@ -247,9 +253,34 @@ async def homepage(request: Request):
     return templates.TemplateResponse("landing.html", {"request": request})
 
 
+async def fetch_response(method: str, url: str, headers: dict, params: dict, body: bytes):
+    async with ClientSession() as session:
+        async with session.request(method, url, headers=headers, params=params, data=body) as upstream_response:
+            content = await upstream_response.read()
+            media_type = upstream_response.headers.get("Content-Type", "text/html")
+            LOGGER.info(media_type)
+            LOGGER.info(content)
+            resp_headers = {k: v for k, v in upstream_response.headers.items() if k.lower() != "content-length"}
+            LOGGER.info(resp_headers)
+            return HTMLResponse(content=content, status_code=upstream_response.status, headers=resp_headers, media_type=media_type)
+
+
+@app.api_route("/{service}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+@app.api_route("/{service}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy(request: Request, service: str, path: str = ""):
+    if service not in SERVICES:
+        raise HTTPException(status_code=404, detail="Service not found")
+    
+    url = f"{SERVICES[service]}/{path}" if path else SERVICES[service]
+    headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
+    
+    return await fetch_response(request.method, url, headers, dict(request.query_params), await request.body())
+
+
 @app.exception_handler(Exception)
 async def page_not_found(_, exc):
     return HTMLResponse(
         f"<h1>404: Task not found! Mostly wrong input. <br><br>Error: {exc}</h1>",
         status_code=404,
     )
+    

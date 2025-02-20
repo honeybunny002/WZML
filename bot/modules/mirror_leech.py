@@ -142,7 +142,7 @@ class Mirror(TaskListener):
         self.thumbnail_layout = args["-tl"]
         self.as_doc = args["-doc"]
         self.as_med = args["-med"]
-        self.folder_name = f"/{args["-m"]}" if len(args["-m"]) > 0 else ""
+        self.folder_name = f"/{args["-m"]}".rstrip("/") if len(args["-m"]) > 0 else ""
         self.bot_trans = args["-bt"]
         self.user_trans = args["-ut"]
 
@@ -358,6 +358,10 @@ class Mirror(TaskListener):
                         await self.remove_from_same_dir()
                         await delete_links(self.message)
                         return
+                except Exception as e:
+                    await send_message(self.message, e)
+                    await self.remove_from_same_dir()
+                    return
 
         if file_ is not None:
             await TelegramDownloadHelper(self).add_download(

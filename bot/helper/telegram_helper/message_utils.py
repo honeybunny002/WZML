@@ -1,4 +1,4 @@
-from asyncio import sleep
+from asyncio import sleep, gather
 from re import match as re_match
 from time import time
 
@@ -8,6 +8,10 @@ from pyrogram.errors import (
     MessageNotModified,
     MessageEmpty,
     ReplyMarkupInvalid,
+    PhotoInvalidDimensions,
+    WebpageCurlFailed,
+    MediaEmpty,
+    MediaCaptionTooLong,
 )
 
 try:
@@ -23,8 +27,44 @@ from ..ext_utils.exceptions import TgLinkException
 from ..ext_utils.status_utils import get_readable_message
 
 
-async def send_message(message, text, buttons=None, block=True, **kwargs):
+async def send_message(message, text, buttons=None, block=True, photo=None, **kwargs):
     try:
+        if photo:
+            try:
+                if isinstance(message, int):
+                    return await TgClient.bot.send_photo(
+                        chat_id=message,
+                        photo=photo,
+                        caption=text,
+                        reply_markup=buttons,
+                        disable_notification=True,
+                        **kwargs,
+                    )
+                return await message.reply_photo(
+                    photo=photo,
+                    reply_to_message_id=message.id,
+                    caption=text,
+                    quote=True,
+                    reply_markup=buttons,
+                    disable_notification=True,
+                    **kwargs,
+                )
+            except FloodWait as f:
+                LOGGER.warning(str(f))
+                if not block:
+                    return str(f)
+                await sleep(f.value * 1.2)
+                return await send_message(message, text, buttons, block, photo)
+            except MediaCaptionTooLong:
+                return await send_message(
+                    message, text[:1024], buttons, block, photo,
+                )
+            except (PhotoInvalidDimensions, WebpageCurlFailed, MediaEmpty):
+                LOGGER.error("Invalid photo dimensions or empty media", exc_info=True)
+                return
+            except Exception as e:
+                LOGGER.error("Error while sending photo", exc_info=True)
+                return
         if isinstance(message, int):
             return await TgClient.bot.send_message(
                 chat_id=message,
@@ -131,26 +171,22 @@ async def send_rss(text, chat_id, thread_id):
         return str(e)
 
 
-async def delete_message(message):
-    try:
-        await message.delete()
-    except Exception as e:
-        LOGGER.error(str(e))
+async def delete_message(*args):
+    tasks = [msg.delete() for msg in args if msg]
+    results = await gather(*tasks, return_exceptions=True)
+    for result in results:
+        if isinstance(result, Exception):
+            LOGGER.error(result)
 
 
 async def delete_links(message):
     if Config.DELETE_LINKS:
-        if reply_to := message.reply_to_message:
-            await delete_message(reply_to)
-        await delete_message(message)
+        await delete_message(message, message.reply_to_message)
 
 
-async def auto_delete_message(cmd_message=None, bot_message=None):
-    await sleep(120)
-    if cmd_message is not None:
-        await delete_message(cmd_message)
-    if bot_message is not None:
-        await delete_message(bot_message)
+async def auto_delete_message(*args, stime=90):
+    await sleep(stime)
+    await delete_message(*args)
 
 
 async def delete_status():

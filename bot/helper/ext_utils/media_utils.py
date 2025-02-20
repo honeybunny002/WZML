@@ -1,4 +1,6 @@
+from contextlib import suppress
 from PIL import Image
+from hashlib import md5
 from aiofiles.os import remove, path as aiopath, makedirs
 from asyncio import (
     create_subprocess_exec,
@@ -11,20 +13,28 @@ from os import path as ospath
 from re import search as re_search, escape
 from time import time
 from aioshutil import rmtree
+from langcodes import Language
 
 from ... import LOGGER, cpu_no, DOWNLOAD_DIR
-from ...core.config_manager import Config
 from .bot_utils import cmd_exec, sync_to_async
 from .files_utils import get_mime_type, is_archive, is_archive_split
 from .status_utils import time_to_seconds
 
 
+def get_md5_hash(up_path):
+    md5_hash = md5()
+    with open(up_path, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            md5_hash.update(byte_block)
+        return md5_hash.hexdigest()
+
+
 async def create_thumb(msg, _id=""):
     if not _id:
-        _id = msg.id
-        path = f"{DOWNLOAD_DIR}Thumbnails"
+        _id = time()
+        path = f"{DOWNLOAD_DIR}thumbnails"
     else:
-        path = "Thumbnails"
+        path = "thumbnails"
     await makedirs(path, exist_ok=True)
     photo_dir = await msg.download()
     output = ospath.join(path, f"{_id}.jpg")
@@ -33,7 +43,7 @@ async def create_thumb(msg, _id=""):
     return output
 
 
-async def get_media_info(path):
+async def get_media_info(path, extra_info=False):
     try:
         result = await cmd_exec(
             [
@@ -49,13 +59,37 @@ async def get_media_info(path):
         )
     except Exception as e:
         LOGGER.error(f"Get Media Info: {e}. Mostly File not found! - File: {path}")
-        return 0, None, None
+        return (0, "", "", "") if extra_info else (0, None, None)
     if result[0] and result[2] == 0:
-        fields = eval(result[0]).get("format")
+        ffresult = eval(result[0])
+        fields = ffresult.get("format")
         if fields is None:
             LOGGER.error(f"get_media_info: {result}")
-            return 0, None, None
+            return (0, "", "", "") if extra_info else (0, None, None)
         duration = round(float(fields.get("duration", 0)))
+        if extra_info:
+            lang, qual, stitles = "", "", ""
+            if (streams := ffresult.get("streams")) and streams[0].get(
+                "codec_type"
+            ) == "video":
+                qual = int(streams[0].get("height"))
+                qual = f"{480 if qual <= 480 else 540 if qual <= 540 else 720 if qual <= 720 else 1080 if qual <= 1080 else 2160 if qual <= 2160 else 4320 if qual <= 4320 else 8640}p"
+                for stream in streams:
+                    if stream.get("codec_type") == "audio" and (
+                        lc := stream.get("tags", {}).get("language")
+                    ):
+                        with suppress(Exception):
+                            lc = Language.get(lc).display_name()
+                        if lc not in lang:
+                            lang += f"{lc}, "
+                    if stream.get("codec_type") == "subtitle" and (
+                        st := stream.get("tags", {}).get("language")
+                    ):
+                        with suppress(Exception):
+                            st = Language.get(st).display_name()
+                        if st not in stitles:
+                            stitles += f"{st}, "
+            return duration, qual, lang[:-2], stitles[:-2]
         tags = fields.get("tags", {})
         artist = tags.get("artist") or tags.get("ARTIST") or tags.get("Artist")
         title = tags.get("title") or tags.get("TITLE") or tags.get("Title")
@@ -151,7 +185,7 @@ async def take_ss(video_file, ss_nb) -> bool:
                 )
                 await rmtree(dirpath, ignore_errors=True)
                 return False
-        except:
+        except Exception:
             LOGGER.error(
                 f"Error while creating sreenshots from video. Path: {video_file}. Error: Timeout some issues with ffmpeg with specific arch!"
             )
@@ -164,7 +198,7 @@ async def take_ss(video_file, ss_nb) -> bool:
 
 
 async def get_audio_thumbnail(audio_file):
-    output_dir = f"{DOWNLOAD_DIR}Thumbnails"
+    output_dir = f"{DOWNLOAD_DIR}thumbnails"
     await makedirs(output_dir, exist_ok=True)
     output = ospath.join(output_dir, f"{time()}.jpg")
     cmd = [
@@ -188,7 +222,7 @@ async def get_audio_thumbnail(audio_file):
                 f"Error while extracting thumbnail from audio. Name: {audio_file} stderr: {err}"
             )
             return None
-    except:
+    except Exception:
         LOGGER.error(
             f"Error while extracting thumbnail from audio. Name: {audio_file}. Error: Timeout some issues with ffmpeg with specific arch!"
         )
@@ -197,7 +231,7 @@ async def get_audio_thumbnail(audio_file):
 
 
 async def get_video_thumbnail(video_file, duration):
-    output_dir = f"{DOWNLOAD_DIR}Thumbnails"
+    output_dir = f"{DOWNLOAD_DIR}thumbnails"
     await makedirs(output_dir, exist_ok=True)
     output = ospath.join(output_dir, f"{time()}.jpg")
     if duration is None:
@@ -231,7 +265,7 @@ async def get_video_thumbnail(video_file, duration):
                 f"Error while extracting thumbnail from video. Name: {video_file} stderr: {err}"
             )
             return None
-    except:
+    except Exception:
         LOGGER.error(
             f"Error while extracting thumbnail from video. Name: {video_file}. Error: Timeout some issues with ffmpeg with specific arch!"
         )
@@ -245,7 +279,7 @@ async def get_multiple_frames_thumbnail(video_file, layout, keep_screenshots):
     dirpath = await take_ss(video_file, ss_nb)
     if not dirpath:
         return None
-    output_dir = f"{DOWNLOAD_DIR}Thumbnails"
+    output_dir = f"{DOWNLOAD_DIR}thumbnails"
     await makedirs(output_dir, exist_ok=True)
     output = ospath.join(output_dir, f"{time()}.jpg")
     cmd = [
@@ -276,7 +310,7 @@ async def get_multiple_frames_thumbnail(video_file, layout, keep_screenshots):
                 f"Error while combining thumbnails for video. Name: {video_file} stderr: {err}"
             )
             return None
-    except:
+    except Exception:
         LOGGER.error(
             f"Error while combining thumbnails from video. Name: {video_file}. Error: Timeout some issues with ffmpeg with specific arch!"
         )
@@ -336,7 +370,7 @@ class FFMpeg:
         ):
             try:
                 line = await wait_for(self._listener.subproc.stdout.readline(), 60)
-            except:
+            except Exception:
                 break
             line = line.decode().strip()
             if not line:
@@ -357,12 +391,12 @@ class FFMpeg:
                         )
                         try:
                             self._progress_raw = (
-                                self._processed_time / self._total_time * 100
-                            )
+                                self._processed_time * 100
+                            ) / self._total_time
                             self._eta_raw = (
                                 self._total_time - self._processed_time
                             ) / self._time_rate
-                        except:
+                        except ZeroDivisionError:
                             self._progress_raw = 0
                             self._eta_raw = 0
             await sleep(0.05)
@@ -413,7 +447,7 @@ class FFMpeg:
         else:
             try:
                 stderr = stderr.decode().strip()
-            except:
+            except Exception:
                 stderr = "Unable to decode the error!"
             LOGGER.error(
                 f"{stderr}. Something went wrong while running ffmpeg cmd, mostly file requires different/specific arguments. Path: {f_path}"
@@ -494,7 +528,7 @@ class FFMpeg:
                 return await self.convert_video(video_file, ext, True)
             try:
                 stderr = stderr.decode().strip()
-            except:
+            except Exception:
                 stderr = "Unable to decode the error!"
             LOGGER.error(
                 f"{stderr}. Something went wrong while converting video, mostly file need specific codec. Path: {video_file}"
@@ -537,7 +571,7 @@ class FFMpeg:
         else:
             try:
                 stderr = stderr.decode().strip()
-            except:
+            except Exception:
                 stderr = "Unable to decode the error!"
             LOGGER.error(
                 f"{stderr}. Something went wrong while converting audio, mostly file need specific codec. Path: {audio_file}"
@@ -683,12 +717,10 @@ class FFMpeg:
             elif code != 0:
                 try:
                     stderr = stderr.decode().strip()
-                except:
+                except Exception:
                     stderr = "Unable to decode the error!"
-                try:
+                with suppress(Exception):
                     await remove(out_path)
-                except:
-                    pass
                 if multi_streams:
                     LOGGER.warning(
                         f"{stderr}. Retrying without map, -map 0 not working in all situations. Path: {f_path}"
