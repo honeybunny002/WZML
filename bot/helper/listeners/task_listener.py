@@ -1,8 +1,9 @@
 from asyncio import gather, sleep
 from html import escape
 from time import time
-from re import match
+from mimetypes import guess_type
 from contextlib import suppress
+from os import path as ospath
 
 from aiofiles.os import listdir, makedirs, remove
 from aiofiles.os import path as aiopath
@@ -226,7 +227,12 @@ class TaskListener(TaskConfig):
             self.name = up_path.replace(f"{up_dir}/", "").split("/", 1)[0]
             self.size = await get_path_size(up_dir)
             self.clear()
-
+            
+        if self.is_leech and self.is_file:
+            fname = ospath.basename(up_path)
+            self.file_details["filename"] = fname
+            self.file_details["mime_type"] = (guess_type(fname))[0] or "application/octet-stream"
+            
         if self.name_swap:
             up_path = await self.substitute(up_path)
             if self.is_cancelled:
@@ -369,7 +375,7 @@ class TaskListener(TaskConfig):
                     chat_id, msg_id = link.split("/")[-2:]
                     fmsg += f"{index}. <a href='{link}'>{name}</a>"
                     if Config.MEDIA_STORE and (self.is_super_chat or Config.LEECH_DUMP_CHAT):
-                        if match(r'\d+', chat_id):
+                        if chat_id.isdigit():
                             chat_id = f"-100{chat_id}"
                         flink = f"https://t.me/{TgClient.BNAME}?start={encode_slink('file' + chat_id + '&&' + msg_id)}"
                         fmsg += f"\n┖ <b>Get Media</b> → <a href='{flink}'>Store Link</a> | <a href='https://t.me/share/url?url={flink}'>Share Link</a>"

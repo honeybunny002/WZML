@@ -4,6 +4,7 @@ from uvloop import install
 install()
 
 from asyncio import sleep
+from urllib.parse import urlparse
 from contextlib import asynccontextmanager
 from logging import INFO, WARNING, FileHandler, StreamHandler, basicConfig, getLogger
 
@@ -28,8 +29,8 @@ sabnzbd_client = SabnzbdClient(
     port="8070",
 )
 SERVICES = {
-    "sabnzbd": "http://localhost:8070/sabnzbd",
-    "qbittorrent": "http://localhost:8090",
+    "nzb": {"url": "http://localhost:8070/"},
+    "qbit": {"url": "http://localhost:8090", "password": "wzmlx"},
 }
 
 
@@ -253,31 +254,56 @@ async def homepage(request: Request):
     return templates.TemplateResponse("landing.html", {"request": request})
 
 
-async def fetch_response(method: str, url: str, headers: dict, params: dict, body: bytes):
-    async with ClientSession() as session:
-        async with session.request(method, url, headers=headers, params=params, data=body) as upstream_response:
-            content = await upstream_response.read()
-            media_type = upstream_response.headers.get("Content-Type", "text/html")
-            resp_headers = {k: v for k, v in upstream_response.headers.items() if k.lower() not in ["content-length", "content-encoding"]}
-            LOGGER.info(resp_headers)
-            return HTMLResponse(content=content, status_code=upstream_response.status, headers=resp_headers, media_type=media_type)
+def rewrite_location(location: str, proxy_prefix: str) -> str:
+    parsed = urlparse(location)
+    if not parsed.netloc:
+        return proxy_prefix + location
+    if parsed.hostname in ["localhost", "127.0.0.1"]:
+        return proxy_prefix + parsed.path
+    return location
 
 
-@app.api_route("/qbittorrent/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def qbittorrent_proxy(path: str = "", request: Request = None):
-    base_url = SERVICES["qbittorrent"]
-    url = f"{base_url}/{path}" if path else base_url
+async def proxy_fetch(method: str, url: str, headers: dict, params: dict, body: bytes, proxy_prefix: str):
+    async with ClientSession(auto_decompress=True) as session:
+        async with session.request(method, url, headers=headers, params=params, data=body, allow_redirects=False) as upstream:
+            if upstream.status in (301, 302, 303, 307, 308) and upstream.headers.get("Location"):
+                loc = upstream.headers["Location"]
+                new_loc = rewrite_location(loc, proxy_prefix)
+                return HTMLResponse(status_code=upstream.status, headers={"Location": new_loc})
+            content = await upstream.read()
+            media_type = upstream.headers.get("Content-Type", "text/html")
+            resp_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in ["content-length", "content-encoding"]}
+            return HTMLResponse(content=content, status_code=upstream.status, headers=resp_headers, media_type=media_type)
+
+
+async def protected_proxy(service: str, path: str, request: Request, password: str = None):
+    service_info = SERVICES.get(service)
+    if not service_info:
+        raise HTTPException(status_code=404, detail="Service not found")
+    if "password" in service_info and password != service_info["password"]:
+        raise HTTPException(status_code=403, detail="Unauthorized access")
+    base = service_info["url"]
+    url = f"{base}/{path}" if path else base
     headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
-    return await fetch_response(request.method, url, headers, dict(request.query_params), await request.body())
-    
+    body = await request.body()
+    return await proxy_fetch(request.method, url, headers, dict(request.query_params), body, f"/{service}")
 
-@app.api_route("/sabnzbd/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+
+@app.api_route("/nzb/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def sabnzbd_proxy(path: str = "", request: Request = None):
-    base_url = SERVICES["sabnzbd"]
-    url = f"{base_url}/{path}" if path else base_url
-    headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
-    return await fetch_response(request.method, url, headers, dict(request.query_params), await request.body())
+    return await protected_proxy("nzb", path, request)
 
+
+@app.api_route("/qbit/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def qbittorrent_proxy(path: str = "", request: Request = None):
+    password = request.query_params.get("pass") or request.cookies.get("qbit_pass")
+    if not password:
+        raise HTTPException(status_code=403, detail="Missing password")
+    response = await protected_proxy("qbit", path, request, password)
+    if "pass" in request.query_params:
+        response.set_cookie("qbit_pass", password)
+    return response
+    
 
 @app.exception_handler(Exception)
 async def page_not_found(_, exc):

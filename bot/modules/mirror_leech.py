@@ -277,7 +277,8 @@ class Mirror(TaskListener):
                 or reply_to.animation
                 or None
             )
-
+            self.file_details = {"caption": reply_to.caption}
+            
             if file_ is None:
                 if reply_text := reply_to.text:
                     self.link = reply_text.split("\n", 1)[0].strip()
