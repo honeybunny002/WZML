@@ -22,6 +22,7 @@ USE_SERVICE_ACCOUNTS = False
 NAME_SWAP = ""
 FFMPEG_CMDS = {}
 UPLOAD_PATHS = {}
+INSTADL_API = "https://instagramcdn.vercel.app"
 # Task Tools
 FORCE_SUB_IDS = ""
 MEDIA_STORE = True
