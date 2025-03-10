@@ -7,13 +7,13 @@ from aiofiles import open as aiopen
 from cloudscraper import create_scraper
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot.core.tg_client import TgClient
-
 from .. import LOGGER, user_data
 from ..core.config_manager import Config
+from ..core.tg_client import TgClient
 from ..helper.ext_utils.bot_utils import decode_slink, new_task, update_user_ldata
 from ..helper.ext_utils.status_utils import get_readable_time
 from ..helper.ext_utils.db_handler import database
+from ..helper.languages import Language
 from ..helper.telegram_helper.bot_commands import BotCommands
 from ..helper.telegram_helper.button_build import ButtonMaker
 from ..helper.telegram_helper.filters import CustomFilters
@@ -29,9 +29,10 @@ from ..helper.telegram_helper.message_utils import (
 @new_task
 async def start(_, message):
     userid = message.from_user.id
+    lang = Language()
     buttons = ButtonMaker()
-    buttons.url_button("Git Repo", "https://www.github.com/SilentDemonSD/WZML-X")
-    buttons.url_button("Updates", "https://t.me/WZML_X")
+    buttons.url_button(lang.START_BUTTON1, "https://www.github.com/SilentDemonSD/WZML-X")
+    buttons.url_button(lang.START_BUTTON2, "https://t.me/WZML_X")
     reply_markup = buttons.build_menu(2)
 
     if len(message.command) > 1 and message.command[1] == "wzmlx":
@@ -42,13 +43,12 @@ async def start(_, message):
             decrypted_url = decrypted_url.replace("file", "")
             chat_id, msg_id = decrypted_url.split("&&")
             LOGGER.info(f"Copying message from {chat_id} & {msg_id} to {userid}")
-            return await TgClient.bot.copy_message( # TODO: make it function
-                    chat_id=userid,
-                    from_chat_id=int(chat_id) if match(r'\d+', chat_id) else chat_id,
-                    message_id=int(msg_id),
-                    
-                    disable_notification=True,
-                )
+            return await TgClient.bot.copy_message(  # TODO: make it function
+                chat_id=userid,
+                from_chat_id=int(chat_id) if match(r"\d+", chat_id) else chat_id,
+                message_id=int(msg_id),
+                disable_notification=True,
+            )
         elif Config.VERIFY_TIMEOUT:
             input_token, pre_uid = decrypted_url.split("&&")
             if int(pre_uid) != userid:
@@ -61,6 +61,14 @@ async def start(_, message):
                 return await send_message(
                     message,
                     "<b>Access Token already used!</b>\n\n<i>Kindly generate a new one.</i>",
+                )
+            elif (
+                Config.LOGIN_PASS
+                and data["VERIFY_TOKEN"].casefold() == Config.LOGIN_PASS.casefold()
+            ):
+                return await send_message(
+                    message,
+                    "<b>Bot Already Logged In via Password</b>\n\n<i>No Need to Accept Temp Tokens.</i>",
                 )
             buttons.data_button(
                 "Activate Access Token", f"start pass {input_token}", "header"
@@ -75,10 +83,9 @@ async def start(_, message):
             return await send_message(message, msg, reply_markup)
 
     if await CustomFilters.authorized(_, message):
-        start_string = f"""
-This bot can mirror from links|tgfiles|torrents|nzb|rclone-cloud to any rclone cloud, Google Drive or to telegram.
-Type /{BotCommands.HelpCommand[0]} to get a list of available commands
-"""
+        start_string = lang.START_MSG.format(
+            cmd=BotCommands.HelpCommand[0],
+        )
         await send_message(message, start_string, reply_markup)
     elif Config.BOT_PM:
         await send_message(
@@ -118,6 +125,36 @@ async def start_cb(_, query):
         [InlineKeyboardButton("✅️ Activated ✅", callback_data="start pass activated")],
     )
     await edit_reply_markup(query.message, InlineKeyboardMarkup(kb))
+
+
+@new_task
+async def login(_, message):
+    if Config.LOGIN_PASS is None:
+        return await send_message(message, "<i>Login is not enabled !</i>")
+    elif len(message.command) > 1:
+        user_id = message.from_user.id
+        input_pass = message.command[1]
+
+        if user_data.get(user_id, {}).get("VERIFY_TOKEN", "") == Config.LOGIN_PASS:
+            return await send_message(
+                message, "<b>Already Bot Login In!</b>\n\n<i>No Need to Login Again</i>"
+            )
+
+        if input_pass.casefold() != Config.LOGIN_PASS.casefold():
+            return await send_message(
+                message, "<b>Wrong Password!</b>\n\n<i>Kindly check and try again</i>"
+            )
+
+        update_user_ldata(user_id, "VERIFY_TOKEN", Config.LOGIN_PASS)
+        if Config.DATABASE_URL:
+            await database.update_user_data(user_id)
+        return await send_message(
+            message, "<b>Bot Permanent Logged In!</b>\n\n<i>Now you can use the bot</i>"
+        )
+    else:
+        await send_message(
+            message, "<b>Bot Login Usage :</b>\n\n<code>/login [password]</code>"
+        )
 
 
 @new_task

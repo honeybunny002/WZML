@@ -6,6 +6,7 @@ TELEGRAM_HASH = ""
 DATABASE_URL = ""
 
 # OPTIONAL CONFIG
+DEFAULT_LANG = "en"
 TG_PROXY = {}            # {"scheme": ”socks5”, "hostname": ””, "port": 1234, "username": ”user”, "password": ”pass”}
 USER_SESSION_STRING = ""
 CMD_SUFFIX = ""
@@ -27,14 +28,35 @@ UPLOAD_PATHS = {}
 # Hyper Tg Downloader
 HELPER_TOKENS = ""
 
+#Insta video downloader api
+INSTADL_API = ""
+
+# Media Search
+IMDB_TEMPLATE = """<b>Title: </b> {title} [{year}]
+<b>Also Known As:</b> {aka}
+<b>Rating ⭐️:</b> <i>{rating}</i>
+<b>Release Info: </b> <a href="{url_releaseinfo}">{release_date}</a>
+<b>Genre: </b>{genres}
+<b>IMDb URL:</b> {url}
+<b>Language: </b>{languages}
+<b>Country of Origin : </b> {countries}
+
+<b>Story Line: </b><code>{plot}</code>
+
+<a href="{url_cast}">Read More ...</a>"""
+
 # Task Tools
 FORCE_SUB_IDS = ""
 MEDIA_STORE = True
 DELETE_LINKS = False
+CLEAN_LOG_MSG = False
+
+# Limiters
 BOT_MAX_TASKS = 0
 USER_MAX_TASKS = 0
 USER_TIME_INTERVAL = 0
 VERIFY_TIMEOUT = 0
+LOGIN_PASS = ""
 
 # Bot Settings
 BOT_PM = False

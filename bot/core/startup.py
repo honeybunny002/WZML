@@ -56,11 +56,12 @@ async def update_aria2_options():
 
 
 async def update_nzb_options():
-    try:
-        no = (await sabnzbd_client.get_config())["config"]["misc"]
-        nzb_options.update(no)
-    except APIResponseError as e:
-        LOGGER.error(f"Error in NZB Options: {e}")
+    if Config.USENET_SERVERS:
+        try:
+            no = (await sabnzbd_client.get_config())["config"]["misc"]
+            nzb_options.update(no)
+        except (APIResponseError, Exception) as e:
+            LOGGER.error(f"Error in NZB Options: {e}")
 
 async def load_settings():
     if not Config.DATABASE_URL:
@@ -238,6 +239,21 @@ async def update_variables():
         drives_names.append("Main")
         drives_ids.append(Config.GDRIVE_ID)
         index_urls.append(Config.INDEX_URL)
+
+    if not Config.IMDB_TEMPLATE:
+        Config.IMDB_TEMPLATE = """
+<b>Title: </b> {title} [{year}]
+<b>Also Known As:</b> {aka}
+<b>Rating ⭐️:</b> <i>{rating}</i>
+<b>Release Info: </b> <a href="{url_releaseinfo}">{release_date}</a>
+<b>Genre: </b>{genres}
+<b>IMDb URL:</b> {url}
+<b>Language: </b>{languages}
+<b>Country of Origin : </b> {countries}
+
+<b>Story Line: </b><code>{plot}</code>
+
+<a href="{url_cast}">Read More ...</a>"""
 
     if await aiopath.exists("list_drives.txt"):
         async with aiopen("list_drives.txt", "r+") as f:

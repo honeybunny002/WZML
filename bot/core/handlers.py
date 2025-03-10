@@ -49,6 +49,13 @@ def add_handlers():
         )
     )
     TgClient.bot.add_handler(
+        MessageHandler(
+            broadcast,
+            filters=command(BotCommands.BroadcastCommand, case_sensitive=True)
+            & CustomFilters.sudo,
+        )
+    )
+    TgClient.bot.add_handler(
         CallbackQueryHandler(
             edit_bot_settings, filters=regex("^botset") & CustomFilters.sudo
         )
@@ -228,6 +235,11 @@ def add_handlers():
     )
     TgClient.bot.add_handler(
         MessageHandler(
+            login, filters=command(BotCommands.LoginCommand, case_sensitive=True)
+        )
+    )
+    TgClient.bot.add_handler(
+        MessageHandler(
             log,
             filters=command(BotCommands.LogCommand, case_sensitive=True)
             & CustomFilters.sudo,
@@ -251,6 +263,16 @@ def add_handlers():
             filters=command(BotCommands.RestartSessionsCommand, case_sensitive=True)
             & CustomFilters.sudo,
         )
+    )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            imdb_search,
+            filters=command(BotCommands.IMDBCommand, case_sensitive=True)
+            & CustomFilters.authorized,
+        )
+    )
+    TgClient.bot.add_handler(
+        CallbackQueryHandler(imdb_callback, filters=regex("^imdb"))
     )
     TgClient.bot.add_handler(
         MessageHandler(
@@ -343,16 +365,42 @@ def add_handlers():
     )
     if Config.SET_COMMANDS:
         global BOT_COMMANDS
+
         def insert_at(d, k, v, i):
             return dict(list(d.items())[:i] + [(k, v)] + list(d.items())[i:])
 
         if Config.JD_EMAIL and Config.JD_PASS:
-            BOT_COMMANDS = insert_at(BOT_COMMANDS, "JdMirror", "[link/file] Mirror to Upload Destination using JDownloader", 2)
-            BOT_COMMANDS = insert_at(BOT_COMMANDS, "JdLeech", "[link/file] Leech files to Upload to Telegram using JDownloader", 6)
+            BOT_COMMANDS = insert_at(
+                BOT_COMMANDS,
+                "JdMirror",
+                "[link/file] Mirror to Upload Destination using JDownloader",
+                2,
+            )
+            BOT_COMMANDS = insert_at(
+                BOT_COMMANDS,
+                "JdLeech",
+                "[link/file] Leech files to Upload to Telegram using JDownloader",
+                6,
+            )
 
         if len(Config.USENET_SERVERS) != 0:
-            BOT_COMMANDS = insert_at(BOT_COMMANDS, "NzbMirror", "[nzb] Mirror to Upload Destination using Sabnzbd", 2)
-            BOT_COMMANDS = insert_at(BOT_COMMANDS, "NzbLeech", "[nzb] Leech files to Upload to Telegram using Sabnzbd", 6)
+            BOT_COMMANDS = insert_at(
+                BOT_COMMANDS,
+                "NzbMirror",
+                "[nzb] Mirror to Upload Destination using Sabnzbd",
+                2,
+            )
+            BOT_COMMANDS = insert_at(
+                BOT_COMMANDS,
+                "NzbLeech",
+                "[nzb] Leech files to Upload to Telegram using Sabnzbd",
+                6,
+            )
+
+        if Config.LOGIN_PASS:
+            BOT_COMMANDS = insert_at(
+                BOT_COMMANDS, "Login", "[password] Login to Bot", 14
+            )
 
         TgClient.bot.set_bot_commands(
             [

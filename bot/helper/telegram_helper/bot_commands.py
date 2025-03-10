@@ -2,6 +2,7 @@ from ...core.config_manager import Config
 
 class BotCommands:
     StartCommand = "start"
+    LoginCommand = "login"
 
     commands = {
         "Mirror": ["mirror", "m"],
@@ -27,8 +28,9 @@ class BotCommands:
         "MediaInfo": ["mediainfo", "mi"],
         "SpeedTest": ["speedtest", "stest"],
         "Ping": "ping",
-        "Restart": ["restart", "r", "restartall"],
-        "RestartSessions": "restartses",
+        "Restart": ["restart", "r"],
+        "RestartSessions": ["restartses", "rses"],
+        "Broadcast": ["broadcast", "bc"],
         "Stats": ["stats", "st"],
         "Help": ["help", "h"],
         "Log": "log",
@@ -36,6 +38,7 @@ class BotCommands:
         "AExec": "aexec",
         "Exec": "exec",
         "ClearLocals": "clearlocals",
+        "IMDB": "imdb",
         "Rss": "rss",
         "Authorize": ["authorize", "a"],
         "UnAuthorize": ["unauthorize", "ua"],

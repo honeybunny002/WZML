@@ -35,7 +35,6 @@ from .. import (
 )
 from ..helper.ext_utils.bot_utils import (
     SetInterval,
-    sync_to_async,
     new_task,
 )
 from ..core.config_manager import Config
@@ -696,6 +695,10 @@ async def edit_bot_settings(client, query):
         await update_buttons(message, "nzb")
         await database.update_nzb_config()
     elif data[1] == "syncnzb":
+        if not Config.USENET_SERVERS:
+            return await query.answer(
+                "Syncronization Paused. No USENET_SERVERS is provided !"
+            )
         await query.answer(
             "Syncronization Started. It takes up to 2 sec!", show_alert=True
         )
@@ -707,7 +710,7 @@ async def edit_bot_settings(client, query):
             "Syncronization Started. It takes up to 2 sec!", show_alert=True
         )
         qbit_options.clear()
-        await sync_to_async(update_qb_options)
+        await update_qb_options()
         await database.save_qbit_settings()
     elif data[1] == "emptyaria":
         await query.answer()
