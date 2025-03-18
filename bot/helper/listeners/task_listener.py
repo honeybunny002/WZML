@@ -45,7 +45,7 @@ from ..mirror_leech_utils.status_utils.gdrive_status import GoogleDriveStatus
 from ..mirror_leech_utils.status_utils.queue_status import QueueStatus
 from ..mirror_leech_utils.status_utils.rclone_status import RcloneStatus
 from ..mirror_leech_utils.status_utils.telegram_status import TelegramStatus
-from ..mirror_leech_utils.telegram_uploader import TelegramUploader
+from ..mirror_leech_utils.upload_utils.telegram_uploader import TelegramUploader
 from ..telegram_helper.button_build import ButtonMaker
 from ..telegram_helper.message_utils import (
     delete_message,
@@ -216,12 +216,14 @@ class TaskListener(TaskConfig):
             self.name = up_path.replace(f"{up_dir}/", "").split("/", 1)[0]
             self.size = await get_path_size(up_dir)
             self.clear()
-            
+
         if self.is_leech and self.is_file:
             fname = ospath.basename(up_path)
             self.file_details["filename"] = fname
-            self.file_details["mime_type"] = (guess_type(fname))[0] or "application/octet-stream"
-            
+            self.file_details["mime_type"] = (guess_type(fname))[
+                0
+            ] or "application/octet-stream"
+
         if self.name_swap:
             up_path = await self.substitute(up_path)
             if self.is_cancelled:
@@ -335,7 +337,7 @@ class TaskListener(TaskConfig):
             await database.rm_complete_task(self.message.link)
         msg = (
             f"<b><i>{escape(self.name)}</i></b>\n│"
-            f"\n┟ <b>Size</b> → {get_readable_file_size(self.size)}"
+            f"\n┟ <b>Task Size</b> → {get_readable_file_size(self.size)}"
             f"\n┠ <b>Time Taken</b> → {get_readable_time(time() - self.message.date.timestamp())}"
             f"\n┠ <b>In Mode</b> → {self.mode[0]}"
             f"\n┠ <b>Out Mode</b> → {self.mode[1]}"
@@ -345,7 +347,7 @@ class TaskListener(TaskConfig):
             msg += f"\n┠ <b>Total Files</b> → {folders}"
             if mime_type != 0:
                 msg += f"\n┠ <b>Corrupted Files</b> → {mime_type}"
-            msg += f"\n┖ <b>By</b> → {self.tag}\n\n"
+            msg += f"\n┖ <b>Task By</b> → {self.tag}\n\n"
 
             if self.bot_pm:
                 pmsg = msg
@@ -363,7 +365,9 @@ class TaskListener(TaskConfig):
                 for index, (link, name) in enumerate(files.items(), start=1):
                     chat_id, msg_id = link.split("/")[-2:]
                     fmsg += f"{index}. <a href='{link}'>{name}</a>"
-                    if Config.MEDIA_STORE and (self.is_super_chat or Config.LEECH_DUMP_CHAT):
+                    if Config.MEDIA_STORE and (
+                        self.is_super_chat or Config.LEECH_DUMP_CHAT
+                    ):
                         if chat_id.isdigit():
                             chat_id = f"-100{chat_id}"
                         flink = f"https://t.me/{TgClient.BNAME}?start={encode_slink('file' + chat_id + '&&' + msg_id)}"
@@ -414,7 +418,7 @@ class TaskListener(TaskConfig):
             else:
                 msg += f"\n┃\n┠ Path: <code>{rclone_path}</code>"
                 button = None
-            msg += f"\n┃\n┖ <b>By</b> → {self.tag}"
+            msg += f"\n┃\n┖ <b>Task By</b> → {self.tag}"
             await send_message(self.message, msg, button)
         if self.seed:
             await clean_target(self.up_dir)
@@ -443,13 +447,26 @@ class TaskListener(TaskConfig):
 
         await start_from_queued()
 
-    async def on_download_error(self, error, button=None):
+    async def on_download_error(self, error, button=None, is_limit=False):
         async with task_dict_lock:
             if self.mid in task_dict:
                 del task_dict[self.mid]
             count = len(task_dict)
         await self.remove_from_same_dir()
-        msg = f"{self.tag} Download: {escape(str(error))}"
+        msg = f"""〶 <b><i><u>Limit Breached:</u></i></b>
+│
+┟ <b>Task Size</b> → {get_readable_file_size(self.size)}
+┠ <b>In Mode</b> → {self.mode[0]}
+┠ <b>Out Mode</b> → {self.mode[1]}
+{error}""" if is_limit else f"""<i><b>〶 Download Stopped!</b></i>
+│
+┟ <b>Due To</b> → {escape(str(error))}
+┠ <b>Task Size</b> → {get_readable_file_size(self.size)}
+┠ <b>Time Taken</b> → {get_readable_time(time() - self.message.date.timestamp())}
+┠ <b>In Mode</b> → {self.mode[0]}
+┠ <b>Out Mode</b> → {self.mode[1]}
+┖ <b>Task By</b> → {self.tag}"""
+
         await send_message(self.message, msg, button)
         if count == 0:
             await self.clean()

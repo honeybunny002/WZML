@@ -1,6 +1,7 @@
 from time import time
 from uuid import uuid4
 
+from pyrogram.enums import ChatAction
 from pyrogram.errors import ChannelInvalid, PeerIdInvalid, RPCError, UserNotParticipant
 
 from bot.helper.ext_utils.bot_utils import encode_slink
@@ -11,7 +12,6 @@ from ...core.tg_client import TgClient
 from ..ext_utils.shortener_utils import short_url
 from ..ext_utils.status_utils import get_readable_time
 from .button_build import ButtonMaker
-from .message_utils import delete_message
 
 
 async def chat_info(channel_id):
@@ -64,11 +64,7 @@ async def user_info(user_id):
 
 async def check_botpm(message, button=None):
     try:
-        await delete_message(
-            await TgClient.bot.send_message(
-                chat_id=message.from_user.id, text="<b>Checking Access...</b>"
-            )
-        )
+        await TgClient.bot.send_chat_action(message.from_user.id, ChatAction.TYPING)
         return None, button
     except Exception:
         if button is None:
@@ -90,7 +86,7 @@ async def verify_token(user_id, button=None):
     user_data.setdefault(user_id, {})
     data = user_data[user_id]
     expire = data.get("VERIFY_TIME")
-    if Config.LOGIN_PASS and data.get('VERIFY_TOKEN', '') == Config.LOGIN_PASS:
+    if Config.LOGIN_PASS and data.get("VERIFY_TOKEN", "") == Config.LOGIN_PASS:
         return None, button
     isExpired = (
         expire is None

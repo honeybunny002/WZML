@@ -7,7 +7,9 @@ DATABASE_URL = ""
 
 # OPTIONAL CONFIG
 DEFAULT_LANG = "en"
-TG_PROXY = {}            # {"scheme": ”socks5”, "hostname": ””, "port": 1234, "username": ”user”, "password": ”pass”}
+TG_PROXY = (
+    {}
+)  # {"scheme": ”socks5”, "hostname": ””, "port": 1234, "username": ”user”, "password": ”pass”}
 USER_SESSION_STRING = ""
 CMD_SUFFIX = ""
 AUTHORIZED_CHATS = ""
@@ -28,7 +30,27 @@ UPLOAD_PATHS = {}
 # Hyper Tg Downloader
 HELPER_TOKENS = ""
 
-#Insta video downloader api
+# MegaAPI v4.30
+MEGA_EMAIL = ""
+MEGA_PASSWORD = ""
+
+# Task Limits 
+DIRECT_LIMIT = 0
+MEGA_LIMIT = 0
+TORRENT_LIMIT = 0
+GD_DL_LIMIT = 0
+RC_DL_LIMIT = 0
+CLONE_LIMIT = 0
+JD_LIMIT = 0
+NZB_LIMIT = 0
+YTDLP_LIMIT = 0
+PLAYLIST_LIMIT = 0
+LEECH_LIMIT = 0
+EXTRACT_LIMIT = 0
+ARCHIVE_LIMIT = 0
+STORAGE_LIMIT = 0
+
+# Insta video downloader api
 INSTADL_API = ""
 
 # Media Search

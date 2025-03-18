@@ -9,7 +9,7 @@ from pyrogram.handlers import CallbackQueryHandler
 from time import time
 
 from .... import LOGGER
-from ....core.config_manager import Config
+from ....core.config_manager import Config, BinConfig
 from ...ext_utils.bot_utils import cmd_exec, update_user_ldata, new_task
 from ...ext_utils.db_handler import database
 from ...ext_utils.status_utils import get_readable_file_size, get_readable_time
@@ -164,7 +164,7 @@ class RcloneList:
         )
         try:
             await wait_for(self.event.wait(), timeout=self._timeout)
-        except:
+        except Exception:
             self.path = ""
             self.remote = "Timed Out. Task has been cancelled!"
             self.listener.is_cancelled = True
@@ -258,7 +258,7 @@ class RcloneList:
         elif itype:
             self.item_type = itype
         cmd = [
-            "cloudsweep",
+            BinConfig.RCLONE_NAME,
             "lsjson",
             self.item_type,
             "--fast-list",

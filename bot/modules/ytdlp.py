@@ -292,8 +292,10 @@ class YtDlp(TaskListener):
         check_msg, check_button = await pre_task_check(self.message)
         if check_msg:
             await delete_links(self.message)
-            await auto_delete_message(await send_message(self.message, check_msg, check_button))
-            return 
+            await auto_delete_message(
+                await send_message(self.message, check_msg, check_button)
+            )
+            return
 
         args = {
             "-doc": False,
@@ -434,6 +436,7 @@ class YtDlp(TaskListener):
                 self.message, COMMAND_USAGE["yt"][0], COMMAND_USAGE["yt"][1]
             )
             await self.remove_from_same_dir()
+            await delete_links(self.message)
             return
 
         if "mdisk.me" in self.link:
@@ -444,15 +447,9 @@ class YtDlp(TaskListener):
         except Exception as e:
             await send_message(self.message, e)
             await self.remove_from_same_dir()
+            await delete_links(self.message)
             return
 
-        self.source_url = (
-            self.link
-            if len(self.link) > 0 and self.link.startswith("http")
-            else f"https://t.me/share/url?url={self.link}"
-            if self.link
-            else self.message.link
-        )
         self._set_mode_engine()
 
         options = {"usenetrc": True, "cookiefile": "cookies.txt"}
@@ -474,6 +471,7 @@ class YtDlp(TaskListener):
             msg = str(e).replace("<", " ").replace(">", " ")
             await send_message(self.message, f"{self.tag} {msg}")
             await self.remove_from_same_dir()
+            await delete_links(self.message)
             return
         finally:
             await self.run_multi(input_list, YtDlp)
@@ -486,7 +484,9 @@ class YtDlp(TaskListener):
 
         LOGGER.info(f"Downloading with YT-DLP: {self.link}")
         playlist = "entries" in result
+        
         ydl = YoutubeDLHelper(self)
+        await delete_links(self.message)
         await ydl.add_download(path, qual, playlist, opt)
 
 

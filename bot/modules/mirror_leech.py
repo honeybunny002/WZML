@@ -1,24 +1,26 @@
-from aiofiles.os import path as aiopath
 from base64 import b64encode
 from re import match as re_match
 
-from .. import LOGGER, bot_loop, task_dict_lock, DOWNLOAD_DIR
+from aiofiles.os import path as aiopath
+
+from .. import DOWNLOAD_DIR, LOGGER, bot_loop, task_dict_lock
 from ..helper.ext_utils.bot_utils import (
+    COMMAND_USAGE,
+    arg_parser,
     get_content_type,
     sync_to_async,
-    arg_parser,
-    COMMAND_USAGE,
 )
-from ..helper.ext_utils.task_manager import pre_task_check
 from ..helper.ext_utils.exceptions import DirectDownloadLinkException
 from ..helper.ext_utils.links_utils import (
-    is_url,
-    is_magnet,
+    is_gdrive_id,
     is_gdrive_link,
+    is_mega_link,
+    is_magnet,
     is_rclone_path,
     is_telegram_link,
-    is_gdrive_id,
+    is_url,
 )
+from ..helper.ext_utils.task_manager import pre_task_check
 from ..helper.listeners.task_listener import TaskListener
 from ..helper.mirror_leech_utils.download_utils.aria2_download import (
     add_aria2_download,
@@ -31,15 +33,21 @@ from ..helper.mirror_leech_utils.download_utils.direct_link_generator import (
 )
 from ..helper.mirror_leech_utils.download_utils.gd_download import add_gd_download
 from ..helper.mirror_leech_utils.download_utils.jd_download import add_jd_download
-from ..helper.mirror_leech_utils.download_utils.qbit_download import add_qb_torrent
+from ..helper.mirror_leech_utils.download_utils.mega_download import add_mega_download
 from ..helper.mirror_leech_utils.download_utils.nzb_downloader import add_nzb
+from ..helper.mirror_leech_utils.download_utils.qbit_download import add_qb_torrent
 from ..helper.mirror_leech_utils.download_utils.rclone_download import (
     add_rclone_download,
 )
 from ..helper.mirror_leech_utils.download_utils.telegram_download import (
     TelegramDownloadHelper,
 )
-from ..helper.telegram_helper.message_utils import send_message, delete_links, auto_delete_message, get_tg_link_message
+from ..helper.telegram_helper.message_utils import (
+    auto_delete_message,
+    delete_links,
+    get_tg_link_message,
+    send_message,
+)
 
 
 class Mirror(TaskListener):
@@ -79,9 +87,11 @@ class Mirror(TaskListener):
         check_msg, check_button = await pre_task_check(self.message)
         if check_msg:
             await delete_links(self.message)
-            await auto_delete_message(await send_message(self.message, check_msg, check_button))
-            return 
-        
+            await auto_delete_message(
+                await send_message(self.message, check_msg, check_button)
+            )
+            return
+
         args = {
             "-doc": False,
             "-med": False,
@@ -236,6 +246,7 @@ class Mirror(TaskListener):
             except Exception as e:
                 await send_message(self.message, f"ERROR: {e}")
                 await self.remove_from_same_dir()
+                await delete_links(self.message)
                 return
 
         if isinstance(reply_to, list):
@@ -278,7 +289,7 @@ class Mirror(TaskListener):
                 or None
             )
             self.file_details = {"caption": reply_to.caption}
-            
+
             if file_ is None:
                 if reply_text := reply_to.text:
                     self.link = reply_text.split("\n", 1)[0].strip()
@@ -303,6 +314,7 @@ class Mirror(TaskListener):
             and not is_rclone_path(self.link)
             and not is_gdrive_id(self.link)
             and not is_gdrive_link(self.link)
+            and not is_mega_link(self.link)
         ):
             await send_message(
                 self.message, COMMAND_USAGE["mirror"][0], COMMAND_USAGE["mirror"][1]
@@ -322,13 +334,6 @@ class Mirror(TaskListener):
             await delete_links(self.message)
             return
 
-        self.source_url = (
-            self.link
-            if len(self.link) > 0 and self.link.startswith("http")
-            else f"https://t.me/share/url?url={self.link}"
-            if self.link
-            else self.message.link
-        )
         self._set_mode_engine()
 
         if (
@@ -341,6 +346,7 @@ class Mirror(TaskListener):
             and not self.link.endswith(".torrent")
             and file_ is None
             and not is_gdrive_id(self.link)
+            and not is_mega_link(self.link)
         ):
             content_type = await get_content_type(self.link)
             if content_type is None or re_match(r"text/html|text/plain", content_type):
@@ -362,7 +368,10 @@ class Mirror(TaskListener):
                 except Exception as e:
                     await send_message(self.message, e)
                     await self.remove_from_same_dir()
+                    await delete_links(self.message)
                     return
+                
+        await delete_links(self.message)
 
         if file_ is not None:
             await TelegramDownloadHelper(self).add_download(
@@ -380,6 +389,8 @@ class Mirror(TaskListener):
             await add_rclone_download(self, f"{path}/")
         elif is_gdrive_link(self.link) or is_gdrive_id(self.link):
             await add_gd_download(self, path)
+        elif is_mega_link(self.link):
+            await add_mega_download(self, f"{path}/")
         else:
             ussr = args["-au"]
             pssw = args["-ap"]
@@ -389,7 +400,6 @@ class Mirror(TaskListener):
                     f" authorization: Basic {b64encode(auth.encode()).decode('ascii')}"
                 )
             await add_aria2_download(self, path, headers, ratio, seed_time)
-        await delete_links(self.message)
 
 
 async def mirror(client, message):
