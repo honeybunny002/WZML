@@ -260,6 +260,12 @@ class TelegramUploader:
         ]
         for i in range(0, len(inputs), 10):
             batch = inputs[i : i + 10]
+            if Config.BOT_PM:
+                await TgClient.bot.send_media_group(
+                    chat_id=self._listener.user_id,
+                    media=batch,
+                    disable_notification=True,
+                )
             self._sent_msg = (
                 await self._sent_msg.reply_media_group(
                     media=batch,
@@ -295,7 +301,7 @@ class TelegramUploader:
 
     async def _copy_media(self):
         try:
-            if self._bot_pm and self._listener.is_super_chat:
+            if self._bot_pm:
                 await TgClient.bot.copy_message(
                     chat_id=self._listener.user_id,
                     from_chat_id=self._sent_msg.chat.id,

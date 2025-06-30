@@ -19,6 +19,7 @@ from ..telegram_helper.button_build import ButtonMaker
 
 SIZE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"]
 
+
 class MirrorStatus:
     STATUS_UPLOAD = "Upload"
     STATUS_DOWNLOAD = "Download"
@@ -34,6 +35,8 @@ class MirrorStatus:
     STATUS_SAMVID = "SamVid"
     STATUS_CONVERT = "Convert"
     STATUS_FFMPEG = "FFmpeg"
+    STATUS_YT = "YouTube"
+    STATUS_METADATA = "Metadata"
 
 
 class EngineStatus:
@@ -51,6 +54,8 @@ class EngineStatus:
         self.STATUS_SABNZBD = f"SABnzbd+ v{bot_cache['eng_versions']['SABnzbd+']}"
         self.STATUS_QUEUE = "QSystem v2"
         self.STATUS_JD = "JDownloader v2"
+        self.STATUS_YT = "Youtube-Api"
+        self.STATUS_METADATA = "Metadata"
 
 
 STATUSES = {
@@ -119,7 +124,7 @@ async def get_all_tasks(req_status: str, user_id):
 def get_raw_file_size(size):
     num, unit = size.split()
     return int(float(num) * (1024 ** SIZE_UNITS.index(unit)))
-    
+
 
 def get_readable_file_size(size_in_bytes):
     if not size_in_bytes:

@@ -16,6 +16,13 @@ class Config:
     DATABASE_URL = ""
     DEFAULT_UPLOAD = "rc"
     DELETE_LINKS = False
+    DEBRID_LINK_API = ""
+    DISABLE_TORRENTS = False
+    DISABLE_LEECH = False
+    DISABLE_BULK = False
+    DISABLE_MULTI = False
+    DISABLE_SEED = False
+    DISABLE_FF_MODE = False
     EQUAL_SPLITS = False
     EXCLUDED_EXTENSIONS = ""
     FFMPEG_CMDS = {}
@@ -24,6 +31,8 @@ class Config:
     FORCE_SUB_IDS = ""
     GDRIVE_ID = ""
     GD_DESP = "Uploaded with WZ Bot"
+    AUTHOR_NAME = "WZML-X"
+    AUTHOR_URL = "https://t.me/WZML_X"
     INSTADL_API = ""
     IMDB_TEMPLATE = ""
     INCOMPLETE_TASK_NOTIFIER = False
@@ -48,6 +57,8 @@ class Config:
     ARCHIVE_LIMIT = 0
     STORAGE_LIMIT = 0
     LEECH_DUMP_CHAT = ""
+    LINKS_LOG_ID = ""
+    MIRROR_LOG_ID = ""
     CLEAN_LOG_MSG = False
     LEECH_PREFIX = ""
     LEECH_CAPTION = ""
@@ -57,6 +68,8 @@ class Config:
     MEDIA_GROUP = False
     HYBRID_LEECH = True
     HYPER_THREADS = 0
+    HYDRA_IP = ""
+    HYDRA_API_KEY = ""
     NAME_SWAP = ""
     OWNER_ID = 0
     QUEUE_ALL = 0
@@ -65,6 +78,7 @@ class Config:
     RCLONE_FLAGS = ""
     RCLONE_PATH = ""
     RCLONE_SERVE_URL = ""
+    SHOW_CLOUD_LINK = True
     RCLONE_SERVE_USER = ""
     RCLONE_SERVE_PASS = ""
     RCLONE_SERVE_PORT = 8080
@@ -93,13 +107,17 @@ class Config:
     UPLOAD_PATHS = {}
     UPSTREAM_REPO = ""
     UPSTREAM_BRANCH = "master"
-    UPDATE_PKGS = False
+    UPDATE_PKGS = True
     USENET_SERVERS = []
     USER_SESSION_STRING = ""
     USER_TRANSMISSION = True
     USE_SERVICE_ACCOUNTS = False
     WEB_PINCODE = True
     YT_DLP_OPTIONS = {}
+    YT_DESP = "Uploaded with WZML-X bot"
+    YT_TAGS = ["telegram", "bot", "youtube"]
+    YT_CATEGORY_ID = 22
+    YT_PRIVACY_STATUS = "unlisted"
 
     @classmethod
     def get(cls, key):

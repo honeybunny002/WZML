@@ -34,7 +34,19 @@ HELPER_TOKENS = ""
 MEGA_EMAIL = ""
 MEGA_PASSWORD = ""
 
-# Task Limits 
+# Disable Options
+DISABLE_TORRENTS = False
+DISABLE_LEECH = False
+DISABLE_BULK = False
+DISABLE_MULTI = False
+DISABLE_SEED = False
+DISABLE_FF_MODE = False
+
+# Telegraph
+AUTHOR_NAME = "WZML-X"
+AUTHOR_URL = "https://t.me/WZML_X"
+
+# Task Limits
 DIRECT_LIMIT = 0
 MEGA_LIMIT = 0
 TORRENT_LIMIT = 0
@@ -52,6 +64,10 @@ STORAGE_LIMIT = 0
 
 # Insta video downloader api
 INSTADL_API = ""
+
+# Nzb search
+HYDRA_IP = ""
+HYDRA_API_KEY = ""
 
 # Media Search
 IMDB_TEMPLATE = """<b>Title: </b> {title} [{year}]
@@ -92,10 +108,17 @@ IS_TEAM_DRIVE = False
 STOP_DUPLICATE = False
 INDEX_URL = ""
 
+# YT Tools
+YT_DESP = "Uploaded to YouTube by WZML-X bot"
+YT_TAGS = ["telegram", "bot", "youtube"]  # or as a comma-separated string
+YT_CATEGORY_ID = 22
+YT_PRIVACY_STATUS = "unlisted"
+
 # Rclone
 RCLONE_PATH = ""
 RCLONE_FLAGS = ""
 RCLONE_SERVE_URL = ""
+SHOW_CLOUD_LINK = True
 RCLONE_SERVE_PORT = 0
 RCLONE_SERVE_USER = ""
 RCLONE_SERVE_PASS = ""
@@ -129,7 +152,7 @@ USENET_SERVERS = [
 # Update
 UPSTREAM_REPO = ""
 UPSTREAM_BRANCH = "master"
-UPDATE_PKGS = False
+UPDATE_PKGS = True
 
 # Leech
 LEECH_SPLIT_SIZE = 0
@@ -142,8 +165,12 @@ LEECH_PREFIX = ""
 LEECH_SUFFIX = ""
 LEECH_FONT = ""
 LEECH_CAPTION = ""
-LEECH_DUMP_CHAT = ""
 THUMBNAIL_LAYOUT = ""
+
+# Log Channels
+LEECH_DUMP_CHAT = ""
+LINKS_LOG_ID = ""
+MIRROR_LOG_ID = ""
 
 # qBittorrent/Aria2c
 TORRENT_TIMEOUT = 0

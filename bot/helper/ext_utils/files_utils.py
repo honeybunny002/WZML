@@ -132,9 +132,8 @@ async def clean_download(opath):
 
 async def clean_all():
     await TorrentManager.remove_all()
-    with suppress(Exception):
-        LOGGER.info("Cleaning Download Directory")
-        await aiormtree(DOWNLOAD_DIR, ignore_errors=True)
+    LOGGER.info("Cleaning Download Directory")
+    await (await create_subprocess_exec("rm", "-rf", DOWNLOAD_DIR)).wait()
     await aiomakedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
@@ -150,7 +149,7 @@ async def clean_unwanted(opath):
     for dirpath, _, files in await sync_to_async(walk, opath, topdown=False):
         if not await listdir(dirpath):
             await rmdir(dirpath)
-            
+
 
 async def check_storage_threshold(size, threshold, io_task=False, alloc=False):
     free = (await sync_to_async(disk_usage, DOWNLOAD_DIR)).free

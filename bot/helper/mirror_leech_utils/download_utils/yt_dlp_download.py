@@ -5,10 +5,14 @@ from contextlib import suppress
 from secrets import token_hex
 from yt_dlp import YoutubeDL, DownloadError
 
-from .... import task_dict_lock, task_dict
+from .... import task_dict_lock, task_dict, user_data
 from ....core.config_manager import BinConfig
 from ...ext_utils.bot_utils import sync_to_async, async_to_sync
-from ...ext_utils.task_manager import check_running_tasks, stop_duplicate_check, limit_checker
+from ...ext_utils.task_manager import (
+    check_running_tasks,
+    stop_duplicate_check,
+    limit_checker,
+)
 from ...mirror_leech_utils.status_utils.queue_status import QueueStatus
 from ...telegram_helper.message_utils import send_status_message
 from ..status_utils.yt_dlp_status import YtDlpStatus
@@ -58,7 +62,6 @@ class YoutubeDLHelper:
             "progress_hooks": [self._on_download_progress],
             "logger": MyLogger(self, self._listener),
             "usenetrc": True,
-            "cookiefile": "cookies.txt",
             "allow_multiple_video_streams": True,
             "allow_multiple_audio_streams": True,
             "noprogress": True,
@@ -76,6 +79,17 @@ class YoutubeDLHelper:
                 "extractor": lambda n: 3,
             },
         }
+        cookie_to_use = (
+            usr_cookie
+            if not self._listener.user_dict.get("USE_DEFAULT_COOKIE", False)
+            and (usr_cookie := self._listener.user_dict.get("USER_COOKIE_FILE", ""))
+            and ospath.exists(usr_cookie)
+            else "cookies.txt"
+        )
+        self.opts["cookiefile"] = cookie_to_use
+        LOGGER.info(
+            f"Using cookies.txt file: {cookie_to_use} | User ID : {self._listener.user_id}"
+        )
 
     @property
     def download_speed(self):
@@ -104,18 +118,18 @@ class YoutubeDLHelper:
             if self.is_playlist:
                 self._last_downloaded = 0
         elif d["status"] == "downloading":
-            self._download_speed = d["speed"]
+            self._download_speed = d["speed"] or 0
             if self.is_playlist:
-                downloadedBytes = d["downloaded_bytes"]
+                downloadedBytes = d["downloaded_bytes"] or 0
                 chunk_size = downloadedBytes - self._last_downloaded
                 self._last_downloaded = downloadedBytes
                 self._downloaded_bytes += chunk_size
             else:
                 if d.get("total_bytes"):
-                    self._listener.size = d["total_bytes"]
+                    self._listener.size = d["total_bytes"] or 0
                 elif d.get("total_bytes_estimate"):
-                    self._listener.size = d["total_bytes_estimate"]
-                self._downloaded_bytes = d["downloaded_bytes"]
+                    self._listener.size = d["total_bytes_estimate"] or 0
+                self._downloaded_bytes = d["downloaded_bytes"] or 0
                 self._eta = d.get("eta", "-") or "-"
             try:
                 self._progress = (self._downloaded_bytes / self._listener.size) * 100
@@ -151,9 +165,9 @@ class YoutubeDLHelper:
                     if not entry:
                         continue
                     elif "filesize_approx" in entry:
-                        self._listener.size += entry.get("filesize_approx", 0)
+                        self._listener.size += entry.get("filesize_approx", 0) or 0
                     elif "filesize" in entry:
-                        self._listener.size += entry.get("filesize", 0)
+                        self._listener.size += entry.get("filesize", 0) or 0
                     if not self._listener.name:
                         outtmpl_ = "%(series,playlist_title,channel)s%(season_number& |)s%(season_number&S|)s%(season_number|)02d.%(ext)s"
                         self._listener.name, ext = ospath.splitext(
@@ -319,7 +333,7 @@ class YoutubeDLHelper:
         if msg:
             await self._listener.on_download_error(msg, button)
             return
-        
+
         if limit_exceeded := await limit_checker(self._listener, self.playlist_count):
             await self._listener.on_download_error(limit_exceeded, is_limit=True)
             return
