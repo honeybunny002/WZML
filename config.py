@@ -87,7 +87,7 @@ LEECH_DUMP_CHAT = ""
 THUMBNAIL_LAYOUT = ""
 # qBittorrent/Aria2c
 TORRENT_TIMEOUT = 0
-BASE_URL = "http://172.104.180.146"
+BASE_URL = "http://17180.146"
 BASE_URL_PORT = 80
 WEB_PINCODE = False
 # Queueing system
