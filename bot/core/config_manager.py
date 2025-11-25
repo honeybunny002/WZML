@@ -29,6 +29,10 @@ class Config:
     FILELION_API = ""
     MEDIA_STORE = True
     FORCE_SUB_IDS = ""
+    GOFILE_API = ""
+    GOFILE_FOLDER_ID = ""
+    PIXELDRAIN_KEY = ""
+    BUZZHEAVIER_API = ""
     GDRIVE_ID = ""
     GD_DESP = "Uploaded with WZ Bot"
     AUTHOR_NAME = "WZML-X"
@@ -126,6 +130,7 @@ class Config:
     @classmethod
     def set(cls, key, value):
         if hasattr(cls, key):
+            value = cls._convert_env_type(key, value)
             setattr(cls, key, value)
         else:
             raise KeyError(f"{key} is not a valid configuration key.")
@@ -195,16 +200,22 @@ class Config:
         if original_value is None:
             return value
         elif isinstance(original_value, bool):
-            return value.lower() in ("true", "1", "yes")
+            if isinstance(value, bool):
+                return value
+            return str(value).lower() in ("true", "1", "yes")
         elif isinstance(original_value, int):
+            if isinstance(value, int):
+                return value
             try:
                 return int(value)
-            except ValueError:
+            except (ValueError, TypeError):
                 return original_value
         elif isinstance(original_value, float):
+            if isinstance(value, float):
+                return value
             try:
                 return float(value)
-            except ValueError:
+            except (ValueError, TypeError):
                 return original_value
         return value
 
@@ -228,6 +239,7 @@ class Config:
                             value = []
                     except Exception:
                         value = []
+                value = cls._convert_env_type(key, value)
                 setattr(cls, key, value)
         for key in ["BOT_TOKEN", "OWNER_ID", "TELEGRAM_API", "TELEGRAM_HASH"]:
             value = getattr(cls, key)
@@ -238,8 +250,8 @@ class Config:
 
 
 class BinConfig:
-    ARIA2_NAME = "speeddemon"
-    QBIT_NAME = "torrentgod"
-    FFMPEG_NAME = "vidwarlock"
-    RCLONE_NAME = "cloudphantom"
-    SABNZBD_NAME = "newsslayer"
+    ARIA2_NAME = "blitzfetcher"
+    QBIT_NAME = "stormtorrent"
+    FFMPEG_NAME = "mediaforge"
+    RCLONE_NAME = "ghostdrive"
+    SABNZBD_NAME = "newsripper"

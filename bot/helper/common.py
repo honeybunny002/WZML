@@ -74,13 +74,16 @@ class TaskConfig:
             if isinstance(v, dict):
                 setattr(self, f"{k.lower()}_dict", v)
             elif isinstance(v, str):
-                setattr(self, f"{k.lower()}_dict", self.metadata_processor.parse_string(v))
+                setattr(
+                    self, f"{k.lower()}_dict", self.metadata_processor.parse_string(v)
+                )
             else:
                 setattr(self, f"{k.lower()}_dict", {})
         self.dir = f"{DOWNLOAD_DIR}{self.mid}"
         self.up_dir = ""
         self.link = ""
         self.up_dest = ""
+        self.leech_dest = ""
         self.rc_flags = ""
         self.tag = ""
         self.name = ""
@@ -101,6 +104,7 @@ class TaskConfig:
         self.is_nzb = False
         self.is_jd = False
         self.is_clone = False
+        self.is_uphoster = False
         self.is_gdrive = False
         self.is_rclone = False
         self.is_ytdlp = False
@@ -154,7 +158,7 @@ class TaskConfig:
             )
         )
 
-        out_mode = f"#{'Leech' if self.is_leech else 'Clone' if self.is_clone else 'RClone' if self.up_dest.startswith('mrcc:') or is_rclone_path(self.up_dest) else 'GDrive' if self.up_dest.startswith(('mtp:', 'tp:', 'sa:')) or is_gdrive_id(self.up_dest) else 'UpHosters'}"
+        out_mode = f"#{'Leech' if self.is_leech else 'UphosterUpload' if self.is_uphoster else 'Clone' if self.is_clone else 'RClone' if self.up_dest.startswith('mrcc:') or is_rclone_path(self.up_dest) else 'GDrive' if self.up_dest.startswith(('mtp:', 'tp:', 'sa:')) or is_gdrive_id(self.up_dest) else 'UpHosters'}"
         out_mode += " (Zip)" if self.compress else " (Unzip)" if self.extract else ""
 
         self.is_rclone = is_rclone_path(self.link)
@@ -288,12 +292,41 @@ class TaskConfig:
             default_upload = (
                 self.user_dict.get("DEFAULT_UPLOAD", "") or Config.DEFAULT_UPLOAD
             )
-            if (not self.up_dest and default_upload == "rc") or self.up_dest == "rc":
+            if not self.is_uphoster and (
+                (not self.up_dest and default_upload == "rc") or self.up_dest == "rc"
+            ):
                 self.up_dest = self.user_dict.get("RCLONE_PATH") or Config.RCLONE_PATH
-            elif (not self.up_dest and default_upload == "gd") or self.up_dest == "gd":
+            elif not self.is_uphoster and (
+                (not self.up_dest and default_upload == "gd") or self.up_dest == "gd"
+            ):
                 self.up_dest = self.user_dict.get("GDRIVE_ID") or Config.GDRIVE_ID
+
+            if self.is_uphoster and not self.up_dest:
+                uphoster_service = self.user_dict.get("UPHOSTER_SERVICE", "gofile")
+                services = uphoster_service.split(",")
+                for service in services:
+                    if service == "gofile":
+                        if not (
+                            self.user_dict.get("GOFILE_TOKEN") or Config.GOFILE_API
+                        ):
+                            raise ValueError("No Gofile Token Found!")
+                    elif service == "buzzheavier":
+                        if not (
+                            self.user_dict.get("BUZZHEAVIER_TOKEN")
+                            or Config.BUZZHEAVIER_API
+                        ):
+                            raise ValueError("No BuzzHeavier Token Found!")
+                    elif service == "pixeldrain":
+                        if not (
+                            self.user_dict.get("PIXELDRAIN_KEY")
+                            or Config.PIXELDRAIN_KEY
+                        ):
+                            raise ValueError("No PixelDrain Key Found!")
+                self.up_dest = "Uphoster"
+
             if not self.up_dest:
                 raise ValueError("No Upload Destination!")
+
             if is_gdrive_id(self.up_dest):
                 if not self.up_dest.startswith(
                     ("mtp:", "tp:", "sa:")
@@ -305,10 +338,12 @@ class TaskConfig:
                 ):
                     self.up_dest = f"mrcc:{self.up_dest}"
                 self.up_dest = self.up_dest.strip("/")
+            elif self.is_uphoster:
+                pass
             else:
                 raise ValueError("Wrong Upload Destination!")
 
-            if self.up_dest not in ["rcl", "gdl"]:
+            if self.up_dest not in ["rcl", "gdl"] and not self.is_uphoster:
                 await self.is_token_exists(self.up_dest, "up")
 
             if self.up_dest == "rcl":
@@ -349,11 +384,8 @@ class TaskConfig:
                 ) != self.get_config_path(self.up_dest):
                     raise ValueError("You must use the same config to clone!")
         else:
-            self.up_dest = (
-                self.up_dest
-                or self.user_dict.get("LEECH_DUMP_CHAT")
-                or Config.LEECH_DUMP_CHAT
-            )
+            self.leech_dest = self.up_dest or self.user_dict.get("LEECH_DUMP_CHAT")
+            self.up_dest = Config.LEECH_DUMP_CHAT
             self.hybrid_leech = TgClient.IS_PREMIUM_USER and (
                 self.user_dict.get("HYBRID_LEECH")
                 or Config.HYBRID_LEECH
@@ -502,7 +534,7 @@ class TaskConfig:
                 self.tag = " ".join(user_info[:-1])
             else:
                 self.tag, id_ = text[1].split("Tag: ")[1].split()
-            self.user = self.message.from_user = await self.client.get_users(id_)
+            self.user = self.message.from_user = await self.client.get_users(int(id_))
             self.user_id = self.user.id
             self.user_dict = user_data.get(self.user_id, {})
             with suppress(Exception):
@@ -562,17 +594,19 @@ class TaskConfig:
             nextmsg.sender_chat = self.user
         if intervals["stopAll"]:
             return
+
         await obj(
-            self.client,
-            nextmsg,
-            self.is_qbit,
-            self.is_leech,
-            self.is_jd,
-            self.is_nzb,
-            self.same_dir,
-            self.bulk,
-            self.multi_tag,
-            self.options,
+            client=self.client,
+            message=nextmsg,
+            is_qbit=self.is_qbit,
+            is_leech=self.is_leech,
+            is_jd=self.is_jd,
+            is_nzb=self.is_nzb,
+            is_uphoster=self.is_uphoster,
+            same_dir=self.same_dir,
+            bulk=self.bulk,
+            multi_tag=self.multi_tag,
+            options=self.options,
         ).new_event()
 
     async def init_bulk(self, input_list, bulk_start, bulk_end, obj):
@@ -604,17 +638,19 @@ class TaskConfig:
                 nextmsg.from_user = self.user
             else:
                 nextmsg.sender_chat = self.user
+
             await obj(
-                self.client,
-                nextmsg,
-                self.is_qbit,
-                self.is_leech,
-                self.is_jd,
-                self.is_nzb,
-                self.same_dir,
-                self.bulk,
-                self.multi_tag,
-                self.options,
+                client=self.client,
+                message=nextmsg,
+                is_qbit=self.is_qbit,
+                is_leech=self.is_leech,
+                is_jd=self.is_jd,
+                is_nzb=self.is_nzb,
+                is_uphoster=self.is_uphoster,
+                same_dir=self.same_dir,
+                bulk=self.bulk,
+                multi_tag=self.multi_tag,
+                options=self.options,
             ).new_event()
         except Exception:
             await send_message(
@@ -722,6 +758,8 @@ class TaskConfig:
                     ] and not dl_path.strip().lower().endswith(ext):
                         break
                     new_folder = ospath.splitext(dl_path)[0]
+                    if await aiopath.isfile(new_folder):
+                        new_folder = f"{new_folder}_temp"
                     name = ospath.basename(dl_path)
                     await makedirs(new_folder, exist_ok=True)
                     file_path = f"{new_folder}/{name}"
@@ -736,9 +774,10 @@ class TaskConfig:
                         await cpu_eater_lock.acquire()
                         self.progress = True
                     LOGGER.info(f"Running ffmpeg cmd for: {file_path}")
-                    cmd[index + 1] = file_path
+                    var_cmd = cmd.copy()
+                    var_cmd[index + 1] = file_path
                     self.subsize = self.size
-                    res = await ffmpeg.ffmpeg_cmds(cmd, file_path)
+                    res = await ffmpeg.ffmpeg_cmds(var_cmd, file_path)
                     if res:
                         if delete_files:
                             await remove(file_path)
@@ -858,6 +897,8 @@ class TaskConfig:
                 res = await take_ss(dl_path, ss_nb)
                 if res:
                     new_folder = ospath.splitext(dl_path)[0]
+                    if await aiopath.isfile(new_folder):
+                        new_folder = f"{new_folder}_temp"
                     name = ospath.basename(dl_path)
                     await makedirs(new_folder, exist_ok=True)
                     await gather(
@@ -1022,6 +1063,8 @@ class TaskConfig:
                     )
                     if res and self.is_file:
                         new_folder = ospath.splitext(f_path)[0]
+                        if await aiopath.isfile(new_folder):
+                            new_folder = f"{new_folder}_temp"
                         await makedirs(new_folder, exist_ok=True)
                         await gather(
                             move(f_path, f"{new_folder}/{file_}"),
@@ -1034,6 +1077,8 @@ class TaskConfig:
         pswd = self.compress if isinstance(self.compress, str) else ""
         if self.is_leech and self.is_file:
             new_folder = ospath.splitext(dl_path)[0]
+            if await aiopath.isfile(new_folder):
+                new_folder = f"{new_folder}_temp"
             name = ospath.basename(dl_path)
             await makedirs(new_folder, exist_ok=True)
             new_dl_path = f"{new_folder}/{name}"
