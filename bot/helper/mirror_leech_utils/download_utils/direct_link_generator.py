@@ -696,7 +696,7 @@ def pixeldrain(url):
     try:
         url = url.rstrip("/")
         code = url.split("/")[-1].split("?", 1)[0]
-        response = get("https://pd.cybar.xyz/", allow_redirects=True)
+        response = get("https://pd.1drv.eu.org/", allow_redirects=False)
         return response.url + code
     except Exception as e:
         raise DirectDownloadLinkException("ERROR: Direct link not found")
